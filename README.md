@@ -5,41 +5,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>CITY HOLE - 街を飲み込め</title>
-<!-- モダンなゲーム風フォントの読み込み -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,900;1,900&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
-
 <style>
   :root {
-    --bg: #87ceeb;
-    
-    /* 令和モダンUI用カラーパレット */
-    --glass-bg: rgba(20, 25, 40, 0.65);
-    --glass-border: rgba(255, 255, 255, 0.15);
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    
-    --text-main: #ffffff;
-    --text-sub: #a0aec0;
-    
-    --accent-1: #00f2fe;
-    --accent-2: #4facfe;
-    --accent-glow: rgba(79, 172, 254, 0.5);
-    
-    --danger: #ff4757;
-    --danger-glow: rgba(255, 71, 87, 0.6);
-    
-    --gold: #ffd700;
-    --silver: #c0c0c0;
-    --bronze: #cd7f32;
+    --bg: #bfe3f2;
+    --panel: rgba(255, 255, 255, 0.92);
+    --text: #26333d;
+    --accent: #1fb6a8;
+    --accent-dark: #128f84;
   }
-
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
     background: var(--bg); overflow: hidden;
-    font-family: 'Nunito', sans-serif; /* ベースフォント */
+    font-family: 'Helvetica Neue', Arial, sans-serif;
     touch-action: none; user-select: none;
   }
   canvas { display: block; width: 100%; height: 100%; }
@@ -48,187 +26,63 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 10;
   }
 
-  /* --- HUD (スコア＆タイマー) --- */
   .hud {
-    position: absolute; top: 20px; left: 20px; right: 20px;
+    position: absolute; top: 24px; left: 24px; right: 24px;
     display: flex; justify-content: space-between; align-items: flex-start;
   }
   .hud-box {
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    border-radius: 24px;
-    padding: 12px 28px;
-    text-align: center;
-    box-shadow: var(--glass-shadow);
-    color: var(--text-main);
-    transition: all 0.3s ease;
+    background: var(--panel); border-radius: 20px;
+    padding: 12px 28px; text-align: center;
+    box-shadow: 0 6px 18px rgba(30,50,60,0.08);
   }
   .hud-label {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 13px; font-weight: 900; color: var(--text-sub);
-    letter-spacing: 2px; margin-bottom: 4px;
-    text-transform: uppercase;
+    font-size: 11px; font-weight: 700; color: #a4b0b6; letter-spacing: 2px; margin-bottom: 2px;
   }
   .hud-value {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 32px; font-weight: 900;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    font-size: 26px; font-weight: 800; color: var(--text);
   }
-  
-  /* タイマー警告時 */
-  #timer-box.danger {
-    background: rgba(255, 71, 87, 0.25);
-    border-color: rgba(255, 71, 87, 0.5);
-    animation: pulseDanger 1s infinite;
-  }
-  #timer-box.danger .hud-value { color: var(--danger); text-shadow: 0 0 15px var(--danger-glow); }
-  
-  @keyframes pulseDanger {
-    0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.5); }
-    70% { box-shadow: 0 0 0 20px rgba(255, 71, 87, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); }
-  }
+  #timer-box.danger .hud-value { color: #e0574a; }
 
-  /* --- リーダーボード --- */
   .leaderboard {
-    position: absolute; top: 110px; right: 20px;
-    background: var(--glass-bg);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    border-radius: 20px; padding: 16px 20px;
-    box-shadow: var(--glass-shadow);
-    min-width: 200px;
-    color: var(--text-main);
+    position: absolute; top: 96px; right: 24px;
+    background: var(--panel); border-radius: 18px; padding: 14px 18px;
+    box-shadow: 0 6px 18px rgba(30,50,60,0.08);
+    min-width: 150px;
   }
   .lb-row {
-    display: flex; align-items: center;
-    margin-bottom: 12px; font-size: 15px; font-weight: 800;
-    opacity: 0.85; transition: opacity 0.2s;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 9px; font-size: 13px; font-weight: 600; color: #9aa5aa;
   }
   .lb-row:last-child { margin-bottom: 0; }
-  .lb-row.me { 
-    opacity: 1; 
-    background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, transparent 100%);
-    padding: 4px 8px; border-radius: 8px; margin-left: -8px;
-  }
-  
-  .lb-rank { font-family: 'Montserrat', sans-serif; width: 24px; text-align: left; font-size: 14px; color: var(--text-sub); }
-  .lb-row.rank-1 .lb-rank { color: var(--gold); font-size: 16px; text-shadow: 0 0 8px rgba(255,215,0,0.5); }
-  .lb-row.rank-2 .lb-rank { color: var(--silver); }
-  .lb-row.rank-3 .lb-rank { color: var(--bronze); }
-  
-  .lb-dot { width: 14px; height: 14px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.8); }
+  .lb-row.me { color: var(--accent); font-weight: 700; }
+  .lb-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
   .lb-name { flex: 1; text-align: left; }
-  .lb-score { font-family: 'Montserrat', sans-serif; font-size: 16px; letter-spacing: 0.5px; }
-  .lb-row.me .lb-name, .lb-row.me .lb-score { color: var(--accent-1); text-shadow: 0 0 8px var(--accent-glow); }
+  .lb-score { font-family: monospace; font-size: 14px; }
 
-  /* --- オーバーレイ (タイトル / リザルト) --- */
   #overlay {
     position: fixed; inset: 0; z-index: 20;
-    background: radial-gradient(circle at center, rgba(15, 23, 42, 0.7) 0%, rgba(15, 23, 42, 0.95) 100%);
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    background: rgba(40, 55, 65, 0.55); backdrop-filter: blur(6px);
     display: flex; align-items: center; justify-content: center; pointer-events: auto;
-    transition: opacity 0.4s ease;
   }
-  #overlay.hidden { opacity: 0; pointer-events: none; }
-  
+  #overlay.hidden { display: none; }
   .panel {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 50px 40px; border-radius: 36px; text-align: center;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-    width: 90%; max-width: 420px;
-    color: var(--text-main);
-    transform: translateY(0) scale(1);
-    animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    background: #fff; padding: 44px 40px; border-radius: 32px; text-align: center;
+    box-shadow: 0 24px 60px rgba(20,35,45,0.25); width: 90%; max-width: 400px;
   }
-  
-  @keyframes popIn {
-    0% { transform: translateY(20px) scale(0.9); opacity: 0; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
-  }
+  .title { font-size: 44px; font-weight: 800; color: var(--text); margin: 0 0 10px; letter-spacing: -1.5px;}
+  .title span { color: var(--accent); }
+  .desc { font-size: 14px; color: #93a0a6; margin-bottom: 32px; font-weight: 600; line-height: 1.6;}
 
-  /* タイトル画面固有 */
-  .title-logo { 
-    font-family: 'Montserrat', sans-serif;
-    font-size: 56px; font-weight: 900; 
-    line-height: 1; margin: 0 0 20px; letter-spacing: -2px;
-    font-style: italic;
-    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
-  }
-  .title-logo .highlight { 
-    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-size: 64px;
-    display: inline-block;
-  }
-  .desc { font-size: 16px; color: var(--text-sub); margin-bottom: 40px; font-weight: 700; line-height: 1.6; }
+  .result-rank { font-size: 30px; font-weight: 800; color: var(--accent); margin: 22px 0 6px; }
+  .result-score { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 32px; }
 
-  /* リザルト画面固有 */
-  .result-header {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 40px; font-weight: 900;
-    color: var(--text-main); margin-bottom: 30px; letter-spacing: -1px;
-    text-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  }
-  .result-body {
-    background: rgba(0,0,0,0.2);
-    border-radius: 20px;
-    padding: 20px; margin-bottom: 40px;
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-  .result-rank-box { margin-bottom: 20px; }
-  .rank-label, .score-label {
-    display: block; font-size: 13px; font-weight: 800; color: var(--text-sub); letter-spacing: 2px; margin-bottom: 5px;
-  }
-  .rank-val {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 48px; font-weight: 900; color: var(--accent-1);
-    text-shadow: 0 0 15px var(--accent-glow);
-  }
-  .rank-total { font-size: 24px; color: var(--text-sub); text-shadow: none; }
-  .score-val {
-    font-family: 'Montserrat', sans-serif;
-    font-size: 32px; font-weight: 900; color: var(--text-main);
-  }
-
-  /* --- ボタン --- */
   button {
-    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
-    color: #fff; border: none; border-radius: 100px;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 22px; font-weight: 900; letter-spacing: 2px;
-    padding: 20px 48px; cursor: pointer;
-    width: 100%;
-    box-shadow: 0 10px 20px var(--accent-glow), inset 0 -4px 0 rgba(0,0,0,0.2), inset 0 2px 0 rgba(255,255,255,0.4);
-    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-    position: relative;
-    overflow: hidden;
+    background: var(--accent); color: #fff; border: none; border-radius: 100px;
+    font-size: 18px; font-weight: 800; padding: 17px 48px; cursor: pointer;
+    box-shadow: 0 6px 0 var(--accent-dark), 0 14px 20px rgba(31,182,168,0.25);
+    transition: all 0.1s; width: 100%;
   }
-  button::after {
-    content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-    transform: skewX(-20deg);
-  }
-  button:hover { 
-    transform: translateY(-3px) scale(1.02); 
-    box-shadow: 0 15px 25px var(--accent-glow), inset 0 -4px 0 rgba(0,0,0,0.2), inset 0 2px 0 rgba(255,255,255,0.4);
-  }
-  button:hover::after {
-    animation: shine 0.7s ease-out;
-  }
-  button:active { 
-    transform: translateY(4px) scale(0.98); 
-    box-shadow: 0 2px 5px var(--accent-glow), inset 0 -1px 0 rgba(0,0,0,0.2); 
-  }
-  
-  @keyframes shine {
-    0% { left: -100%; }
-    100% { left: 200%; }
-  }
+  button:active { transform: translateY(6px); box-shadow: 0 0 0 var(--accent-dark); }
 </style>
 </head>
 <body>
@@ -254,7 +108,6 @@
 </div>
 
 <script>
-// --- ゲームのロジック・描画部分は元のまま ---
 (function(){
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -267,20 +120,26 @@
   window.addEventListener('resize', resize);
   resize();
 
+  // --- チューニング用コンフィグ ---
   const CONFIG = {
     WORLD_SIZE: 3500,
     NUM_BOTS: 3,
     OBJECT_GRID: 100,
     OBJECT_SKIP_CHANCE: 0.08,
-    OVERLAP_MARGIN: 0.9,      
-    GRAVITY_RANGE_MULT: 1.5,        
-    GRAVITY_STRENGTH: 130,          
-    FALL_THRESHOLD_BASE: 0.5,       
-    FALL_THRESHOLD_ROUND_BONUS: 0.14, 
-    GROWTH_MULT: 34,   
-    SPEED_MIN: 95,   
-    SPEED_MAX: 270,  
-    TILT_Y: 0.78,     
+    OVERLAP_MARGIN: 0.9,      // 配置時に他オブジェクトとどこまで近づけて良いか(1で接触ギリギリ)
+
+    // 重力方式:サイズ比の閾値ではなく、「対象の何割が穴の上に来たか」で自然に落ちる
+    GRAVITY_RANGE_MULT: 1.5,        // 穴の半径の何倍まで重力が届くか
+    GRAVITY_STRENGTH: 130,          // 重力の強さ
+    FALL_THRESHOLD_BASE: 0.5,       // 対象の面積の何割が穴の上に来たら落ちるか(基準)
+    FALL_THRESHOLD_ROUND_BONUS: 0.14, // 丸い物ほど閾値が下がる=落ちやすい
+
+    GROWTH_MULT: 34,   // 食べた時の成長量の係数(旧25→34、最大サイズに届きやすく)
+
+    SPEED_MIN: 95,   // 小さい穴の速度
+    SPEED_MAX: 270,  // 最大に近い穴の速度
+
+    TILT_Y: 0.78,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
   };
   const WORLD_SIZE = CONFIG.WORLD_SIZE;
   const INIT_R = 15;
@@ -288,12 +147,21 @@
   const GAME_TIME = 130;
 
   const COLORS = {
-    bg: '#e8ecef',
-    road: '#cfd4d8',
+    bg: '#7fae52',
+    bgDark: '#6f9c46',
+    bgLight: '#8fc25e',
+    road: '#c9c6bc',
+    roadLine: '#f4efe0',
+    curb: '#a6a396',
     player: '#00d2d3',
     bots: ['#ff9f43', '#ee5253', '#5f27cd', '#10ac84', '#ff6b81'],
   };
 
+  // 太陽の方向(常に左上から)。全オブジェクト・地面・穴の陰影をこの一方向で統一する
+  const LIGHT = (function(){ const x=-0.55, y=-0.7, len=Math.hypot(x,y); return { x:x/len, y:y/len }; })();
+
+  // 街のオブジェクト定義。round: 1=丸くて綺麗に吸い込める / 0=角ばって引っかかりやすい
+  // サイズは細かい段階を用意し、穴がどの大きさでも「ギリギリ挑戦できる相手」が必ずいるようにする
   const TYPES = [
     { id:'person',        r:3,   h:8,   pts:1,   col:'#f1c40f', kind:'walker',    round:0.5 },
     { id:'dog',           r:4,   h:5,   pts:2,   col:'#c0785a', kind:'wanderer',  round:0.6 },
@@ -325,7 +193,7 @@
 
   let camX = WORLD_SIZE / 2;
   let camY = WORLD_SIZE / 2;
-  let curZoom = 1.8;
+  let curZoom = 2.3;
 
   let isPointerDown = false;
   let pointerX = W/2, pointerY = H/2;
@@ -355,12 +223,14 @@
 
   function player() { return entities[0]; }
 
+  // 穴のサイズに応じた移動速度:小さいうちは遅く、育つほど速くなる
   function speedFor(r) {
     const t = Math.max(0, Math.min(1, (r - INIT_R) / (MAX_R - INIT_R)));
     const eased = Math.pow(t, 0.55);
     return CONFIG.SPEED_MIN + eased * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
   }
 
+  // 簡易空間ハッシュ:大きい建物(直径最大750)にも対応できるバケット幅
   const BUCKET = 400;
   let spatialBuckets = new Map();
   function bucketKeyOf(x, y) { return Math.floor(x / BUCKET) + ',' + Math.floor(y / BUCKET); }
@@ -439,6 +309,7 @@
     return obj;
   }
 
+  // 食べられた後の再配置。近くで重ならない場所を探し、駄目なら周囲を広げて再挑戦
   function spawnObject(x, y) {
     for (let attempt = 0; attempt < 10; attempt++) {
       const t = pickType();
@@ -452,6 +323,7 @@
         return;
       }
     }
+    // 最終手段:多少の重なりは許容して確実に配置する
     const t = pickType();
     const px = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
     const py = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
@@ -487,18 +359,30 @@
     entities.push({
       isPlayer: true, name: 'YOU', color: COLORS.player,
       x: WORLD_SIZE/2, y: WORLD_SIZE/2, r: INIT_R,
-      vx: 0, vy: 0, score: 0, respawnT: 0
+      vx: 0, vy: 0, score: 0, respawnT: 0,
+      rim: makeRim(), rubble: makeRubble()
     });
     for (let i = 0; i < CONFIG.NUM_BOTS; i++) {
       entities.push({
         isPlayer: false, name: 'CPU ' + (i+1), color: COLORS.bots[i % COLORS.bots.length],
         x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, r: INIT_R,
-        vx: 0, vy: 0, score: 0, respawnT: 0, wanderAngle: Math.random() * Math.PI * 2
+        vx: 0, vy: 0, score: 0, respawnT: 0, wanderAngle: Math.random() * Math.PI * 2,
+        rim: makeRim(), rubble: makeRubble()
       });
     }
     camX = entities[0].x;
     camY = entities[0].y;
-    curZoom = 1.8;
+    curZoom = 2.3;
+  }
+  function makeRim() {
+    const pts = 14, arr = [];
+    for (let i = 0; i < pts; i++) arr.push(0.88 + Math.random() * 0.2);
+    return arr;
+  }
+  function makeRubble() {
+    const arr = [];
+    for (let i = 0; i < 6; i++) arr.push({ angle: Math.random()*Math.PI*2, distF: 0.95+Math.random()*0.12, size: 0.06+Math.random()*0.05 });
+    return arr;
   }
 
   function addArea(e, area) {
@@ -515,6 +399,7 @@
     o.y += (dy / d) * move;
   }
 
+  // 2つの円の重なり面積(対象がどれだけ穴の上に来ているかを面積で判定するため)
   function circleOverlapArea(d, r1, r2) {
     if (d >= r1 + r2) return 0;
     if (d <= Math.abs(r1 - r2)) { const m = Math.min(r1, r2); return Math.PI * m * m; }
@@ -648,6 +533,7 @@
 
     updateMovingObjects(dt);
 
+    // 当たり判定(重力方式)
     for (const e of entities) {
       if (e.respawnT > 0) continue;
 
@@ -656,6 +542,8 @@
         const round = o.type.round;
         const dist = Math.hypot(e.x - o.x, e.y - o.y);
 
+        // 重力:大きさに関わらず、近づいた物は穴に引き寄せられる。
+        // 大きい(重い)物ほど動きにくい。
         const gravityRange = e.r * CONFIG.GRAVITY_RANGE_MULT;
         if (dist < gravityRange) {
           const closeness = 1 - dist / gravityRange;
@@ -663,17 +551,50 @@
           pullObjectToward(o, e, dt, CONFIG.GRAVITY_STRENGTH * closeness * massFactor);
         }
 
-        const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
-        const frac = overlapArea / (Math.PI * o.type.r * o.type.r);
+        // 落下判定:設置面の形(丸い物は円、角ばった物は矩形として近似)に対して
+        // 「何割が穴の上に来ているか」で自然に決まる
+        const isRoundFoot = round >= 0.7;
         const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
+        let frac, outsidePoints = null;
+
+        if (isRoundFoot) {
+          const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
+          frac = overlapArea / (Math.PI * o.type.r * o.type.r);
+        } else {
+          const fw = o.type.r * 0.85, fd = o.type.r * 0.55;
+          const pts = [
+            [-fw,-fd],[0,-fd],[fw,-fd],
+            [-fw,0],[0,0],[fw,0],
+            [-fw,fd],[0,fd],[fw,fd]
+          ];
+          let inside = 0; outsidePoints = [];
+          for (const [lx, ly] of pts) {
+            const wx = o.x + lx, wy = o.y + ly;
+            const pd = Math.hypot(e.x - wx, e.y - wy);
+            if (pd < e.r) inside++; else outsidePoints.push({ x: wx, y: wy });
+          }
+          frac = inside / pts.length;
+        }
 
         o.strain = Math.max(0, Math.min(1, frac / threshold));
 
         if (frac >= threshold) {
           const tight = frac < threshold * 1.4;
+          let topple = false, pivotX = o.x, pivotY = o.y, toppleSign = 1;
+          if (!isRoundFoot && outsidePoints && outsidePoints.length > 0) {
+            pivotX = 0; pivotY = 0;
+            for (const p of outsidePoints) { pivotX += p.x; pivotY += p.y; }
+            pivotX /= outsidePoints.length; pivotY /= outsidePoints.length;
+            const v1x = o.x - pivotX, v1y = o.y - pivotY;
+            const v2x = e.x - pivotX, v2y = e.y - pivotY;
+            toppleSign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
+            topple = true;
+          }
           startFall(o, e, tight);
+          o.topple = topple; o.pivotX = pivotX; o.pivotY = pivotY; o.toppleSign = toppleSign;
         }
 
+        // 地図の外に出ないように保険
         o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
         o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
       }
@@ -719,7 +640,7 @@
     if (p.respawnT <= 0) {
       camX += (p.x - camX) * dt * 4.0;
       camY += (p.y - camY) * dt * 4.0;
-      const targetZoom = Math.max(0.16, 1.8 / Math.pow(p.r / INIT_R, 0.6));
+      const targetZoom = Math.max(0.16, 2.3 / Math.pow(p.r / INIT_R, 0.6));
       curZoom += (targetZoom - curZoom) * dt * 3.0;
     }
 
@@ -744,6 +665,7 @@
     return "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
   }
 
+  // 斜め見下ろし視点:高さのある物は常に同じ方向へ傾く(放射状ではなく一方向)
   const LEAN_X = 0.16;
   const LEAN_Y = -0.6;
   function getTopPos(sx, sy, h) {
@@ -758,12 +680,26 @@
     ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
     ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // 太陽と反対方向へ伸びる落ち影。高いオブジェクトほど影が長くなる
+  function drawCastShadow(sx, sy, footW, footH, heightPx) {
+    const ox = -LIGHT.x * heightPx * 0.5;
+    const oy = -LIGHT.y * heightPx * 0.5 * 0.6;
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#1a2b1f';
+    ctx.beginPath();
+    ctx.ellipse(sx + ox, sy + oy, footW + heightPx*0.12, footH*0.6 + heightPx*0.06, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawBox(sx, sy, w, h, col, scale, fallT) {
     const size = w * curZoom * scale * 0.5;
     const actualH = h * curZoom * scale;
+    drawCastShadow(sx, sy, size, size*0.7, actualH);
     const { tx, ty } = getTopPos(sx, sy, actualH);
 
     const b1 = {x: sx - size, y: sy - size}; const b2 = {x: sx + size, y: sy - size};
@@ -771,14 +707,14 @@
     const t1 = {x: tx - size, y: ty - size}; const t2 = {x: tx + size, y: ty - size};
     const t3 = {x: tx + size, y: ty + size}; const t4 = {x: tx - size, y: ty + size};
 
-    const cSide1 = shade(col, -0.15); const cSide2 = shade(col, -0.3);
+    const cSide1 = shade(col, -0.06); const cSide2 = shade(col, -0.42);
 
     ctx.globalAlpha = 1 - fallT * 0.6;
 
     const dx = tx - sx, dy = ty - sy;
     if (dy < 0) drawQuad(b4, b3, t3, t4, cSide1); else drawQuad(b1, b2, t2, t1, cSide1);
     if (dx < 0) drawQuad(b2, b3, t3, t2, cSide2); else drawQuad(b1, b4, t4, t1, cSide2);
-    drawQuad(t1, t2, t3, t4, col);
+    drawQuad(t1, t2, t3, t4, shade(col, 0.22));
 
     ctx.globalAlpha = 1.0;
   }
@@ -786,6 +722,7 @@
   function drawCylinder(sx, sy, r, h, col, scale, fallT) {
     const size = r * curZoom * scale;
     const actualH = h * curZoom * scale;
+    drawCastShadow(sx, sy, size, size*0.7, actualH);
     const { tx, ty } = getTopPos(sx, sy, actualH);
 
     ctx.globalAlpha = 1 - fallT * 0.6;
@@ -796,11 +733,11 @@
     const p3 = { x: tx + Math.cos(angle - Math.PI/2) * size, y: ty + Math.sin(angle - Math.PI/2) * size };
     const p4 = { x: tx + Math.cos(angle + Math.PI/2) * size, y: ty + Math.sin(angle + Math.PI/2) * size };
 
-    drawQuad(p1, p2, p3, p4, shade(col, -0.2));
+    drawQuad(p1, p2, p3, p4, shade(col, -0.32));
 
-    ctx.fillStyle = col;
+    ctx.fillStyle = shade(col, 0.18);
     ctx.beginPath(); ctx.arc(tx, ty, size, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.stroke();
 
     ctx.globalAlpha = 1.0;
     return { tx, ty };
@@ -821,6 +758,7 @@
     ctx.restore();
   }
 
+  // 自転車:実際に押し出された(立体の)ホイール2つ+フレーム+サドルで構成
   function drawBicycle(sx, sy, t, scale, fallT) {
     const sep = t.r * 0.85 * curZoom * scale;
     const wheelR = t.r * 0.42;
@@ -833,6 +771,7 @@
     drawCylinder(sx + t.r*0.25*curZoom*scale, frameY, t.r * 0.11, t.r * 0.85, shade(t.col, -0.25), scale, fallT);
   }
 
+  // 円柱状の建物:輪郭が丸いので、穴にすっと綺麗にはまる感触を出す
   function drawSilo(sx, sy, t, scale, fallT) {
     drawCylinder(sx, sy, t.r, t.h, t.col, scale, fallT);
     drawCylinder(sx, sy, t.r * 0.97, t.h * 0.5, shade(t.col, 0.18), scale, fallT);
@@ -842,6 +781,7 @@
     drawCylinder(sx, sy, t.r * 0.55, t.h * 1.12, shade(t.col, 0.2), scale, fallT);
   }
 
+  // 複雑な構造の建物:非対称な増築部分があり、穴に引っかかりやすい印象を出す
   function drawComplex(sx, sy, t, scale, fallT) {
     drawBox(sx, sy, t.r * 1.5, t.h, t.col, scale, fallT);
     const off = t.r * 0.85 * curZoom * scale;
@@ -866,8 +806,53 @@
     drawCylinder(sx, sy - t.h * curZoom * scale * 0.85, t.r * 0.5, t.r * 0.5, t.col, scale, fallT);
   }
 
+  // 低ポリの多面クレーター。角度ごとに面を分割し、光源との向きでシェードを変える
+  function craterPt(sx, sy, rad, radY, rim, ringT, i, segs) {
+    const a = (i / segs) * Math.PI * 2;
+    const wob = rim ? rim[i % rim.length] : 1;
+    return { x: sx + Math.cos(a) * rad * ringT * wob, y: sy + Math.sin(a) * radY * ringT * wob, a };
+  }
+  function drawCrater(sx, sy, rad, radY, rim) {
+    const SEGS = 14;
+    const RING_T = [1.0, 0.7, 0.4, 0.16];
+    for (let ring = 0; ring < RING_T.length - 1; ring++) {
+      const rimOuter = ring === 0 ? rim : null;
+      const depthDark = -0.05 - ring * 0.19;
+      for (let i = 0; i < SEGS; i++) {
+        const p1 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i, SEGS);
+        const p2 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i+1, SEGS);
+        const p3 = craterPt(sx, sy, rad, radY, null, RING_T[ring+1], i+1, SEGS);
+        const p4 = craterPt(sx, sy, rad, radY, null, RING_T[ring+1], i, SEGS);
+        const mid = (p1.a + p2.a) / 2;
+        const facing = Math.cos(mid) * (-LIGHT.x) + Math.sin(mid) * (-LIGHT.y);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
+        ctx.closePath();
+        ctx.fillStyle = shade('#6b5a44', depthDark + facing * 0.14);
+        ctx.fill();
+      }
+    }
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rad*RING_T[RING_T.length-1]*0.9, radY*RING_T[RING_T.length-1]*0.9, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#07090b';
+    ctx.fill();
+  }
+  function drawRubble(sx, sy, rad, radY, rubble) {
+    for (const rb of rubble) {
+      const rx = sx + Math.cos(rb.angle) * rad * rb.distF;
+      const ry = sy + Math.sin(rb.angle) * radY * rb.distF;
+      const s = rad * rb.size;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry - s); ctx.lineTo(rx + s*0.85, ry + s*0.55); ctx.lineTo(rx, ry + s*0.55);
+      ctx.closePath(); ctx.fillStyle = '#5d4f3c'; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(rx, ry - s); ctx.lineTo(rx - s*0.85, ry + s*0.55); ctx.lineTo(rx, ry + s*0.55);
+      ctx.closePath(); ctx.fillStyle = '#8a7960'; ctx.fill();
+    }
+  }
+
   function draw() {
-    ctx.fillStyle = '#1b1e24'; 
+    ctx.fillStyle = '#1b1e24'; // マップ外(圏外)の色
     ctx.fillRect(0, 0, W, H);
 
     function toSX(x) { return (x - camX) * curZoom + W/2; }
@@ -888,8 +873,10 @@
     const gridSizeY = 250 * curZoom * CONFIG.TILT_Y;
     const offX = toSX(0) % gridSizeX;
     const offY = toSY(0) % gridSizeY;
-    ctx.strokeStyle = COLORS.road;
-    ctx.lineWidth = 30 * curZoom;
+
+    // 縁石(道路の少し外側、暗め)
+    ctx.strokeStyle = COLORS.curb;
+    ctx.lineWidth = 38 * curZoom;
     ctx.lineCap = 'square';
     for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -897,8 +884,54 @@
     for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
+    // 舗装本体
+    ctx.strokeStyle = COLORS.road;
+    ctx.lineWidth = 30 * curZoom;
+    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // 車線の破線
+    ctx.strokeStyle = COLORS.roadLine;
+    ctx.lineWidth = 3 * curZoom;
+    ctx.setLineDash([14*curZoom, 12*curZoom]);
+    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // 芝の質感(地図座標に固定された疑似ランダムの葉っぱ模様)
+    const patchStep = 55;
+    const px0 = Math.max(0, Math.floor((camX - (W/2)/curZoom) / patchStep) * patchStep);
+    const px1 = Math.min(WORLD_SIZE, px0 + (W/curZoom) + patchStep*2);
+    const py0 = Math.max(0, Math.floor((camY - (H/2)/(curZoom*CONFIG.TILT_Y)) / patchStep) * patchStep);
+    const py1 = Math.min(WORLD_SIZE, py0 + (H/(curZoom*CONFIG.TILT_Y)) + patchStep*2);
+    for (let gx = px0; gx < px1; gx += patchStep) {
+      for (let gy = py0; gy < py1; gy += patchStep) {
+        const seed = Math.sin(gx*12.9898 + gy*78.233) * 43758.5453;
+        const rv = seed - Math.floor(seed);
+        if (rv > 0.5) continue;
+        const jx = gx + ((seed*7)%1) * patchStep;
+        const jy = gy + ((seed*13)%1) * patchStep;
+        const sx2 = toSX(jx), sy2 = toSY(jy);
+        if (sx2 < -10 || sx2 > W+10 || sy2 < -10 || sy2 > H+10) continue;
+        ctx.strokeStyle = rv < 0.25 ? COLORS.bgDark : COLORS.bgLight;
+        ctx.lineWidth = 2 * curZoom;
+        const ang = rv * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(sx2 - Math.cos(ang)*5*curZoom, sy2 + Math.sin(ang)*2.5*curZoom);
+        ctx.lineTo(sx2 + Math.cos(ang)*5*curZoom, sy2 - Math.sin(ang)*2.5*curZoom);
+        ctx.stroke();
+      }
+    }
     ctx.restore();
 
+    // マップの端をハザードテープ風の縞模様で明示する
     ctx.save();
     ctx.lineWidth = 16 * curZoom;
     ctx.setLineDash([20 * curZoom, 20 * curZoom]);
@@ -913,24 +946,30 @@
       if (e.respawnT > 0) continue;
       const sx = toSX(e.x); const sy = toSY(e.y);
       const rad = e.r * curZoom;
-
       const radY = rad * CONFIG.TILT_Y;
 
-      ctx.fillStyle = e.color;
-      ctx.beginPath(); ctx.ellipse(sx, sy, rad + 4*curZoom, radY + 4*curZoom, 0, 0, Math.PI*2); ctx.fill();
+      // 掘り返された地面の縁(ダート)
+      ctx.beginPath();
+      for (let i = 0; i <= 14; i++) {
+        const a = (i/14)*Math.PI*2;
+        const wob = e.rim[i % e.rim.length];
+        const rx = sx + Math.cos(a)*rad*1.06*wob, ry = sy + Math.sin(a)*radY*1.06*wob;
+        if (i===0) ctx.moveTo(rx,ry); else ctx.lineTo(rx,ry);
+      }
+      ctx.closePath();
+      ctx.fillStyle = shade('#6f9c46', -0.25);
+      ctx.fill();
 
-      const grad = ctx.createRadialGradient(sx, sy, rad*0.3, sx, sy, rad);
-      grad.addColorStop(0, '#0a0e17');
-      grad.addColorStop(1, '#1c2836');
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2); ctx.fill();
+      drawCrater(sx, sy, rad, radY, e.rim);
+      drawRubble(sx, sy, rad, radY, e.rubble);
 
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = Math.max(2, rad*0.1);
-      ctx.beginPath(); ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = e.color; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, rad*0.045);
+      ctx.beginPath(); ctx.ellipse(sx, sy, rad*1.01, radY*1.01, 0, 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha = 1;
 
       if (!e.isPlayer) {
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.font = `bold ${12}px sans-serif`; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(20,30,25,0.6)';
+        ctx.font = `bold 12px sans-serif`; ctx.textAlign = 'center';
         ctx.fillText(e.name, sx, sy - rad - 15);
       }
     }
@@ -950,11 +989,19 @@
       }
 
       let curX = o.x, curY = o.y, scale = 1;
+      let toppleAngle = 0, pivotSx = 0, pivotSy = 0;
       if (o.falling && o.eater) {
         const ease = o.fallT * o.fallT;
-        curX = o.startX + (o.eater.x - o.startX) * ease;
-        curY = o.startY + (o.eater.y - o.startY) * ease;
-        scale = 1 - Math.pow(o.fallT, 2);
+        if (o.topple) {
+          curX = o.startX; curY = o.startY;
+          scale = 1 - ease * 0.8;
+          toppleAngle = ease * Math.PI * 0.5 * o.toppleSign;
+          pivotSx = toSX(o.pivotX); pivotSy = toSY(o.pivotY);
+        } else {
+          curX = o.startX + (o.eater.x - o.startX) * ease;
+          curY = o.startY + (o.eater.y - o.startY) * ease;
+          scale = 1 - Math.pow(o.fallT, 2);
+        }
         if (scale <= 0.05) continue;
       }
 
@@ -966,7 +1013,14 @@
         sx += Math.sin(performance.now() * 0.025 + o.seed) * o.strain * 3 * curZoom;
       }
 
-      const squeezing = o.falling && o.tight;
+      if (o.falling && o.topple) {
+        ctx.save();
+        ctx.translate(pivotSx, pivotSy);
+        ctx.rotate(toppleAngle);
+        ctx.translate(-pivotSx, -pivotSy);
+      }
+
+      const squeezing = o.falling && o.tight && !o.topple;
       if (squeezing) {
         const sq = 1 - o.fallT * 0.35;
         ctx.save();
@@ -1016,6 +1070,7 @@
       }
 
       if (squeezing) ctx.restore();
+      if (o.falling && o.topple) ctx.restore();
     }
 
     if (isPointerDown) {
@@ -1028,7 +1083,6 @@
     }
   }
 
-  // --- UI更新部分 (デザインに合わせてHTML構造をリッチに変更) ---
   function updateUI() {
     document.getElementById('scoreVal').textContent = player().score;
     document.getElementById('timeVal').textContent = timeLeft;
@@ -1038,10 +1092,9 @@
 
     const sorted = [...entities].sort((a, b) => b.score - a.score);
     const lbHTML = sorted.map((e, idx) => `
-      <div class="lb-row ${e.isPlayer ? 'me' : ''} rank-${idx+1}">
-        <div class="lb-rank">#${idx+1}</div>
-        <div class="lb-dot" style="background:${e.color}; box-shadow: 0 0 8px ${e.color};"></div>
-        <div class="lb-name">${e.name}</div>
+      <div class="lb-row ${e.isPlayer ? 'me' : ''}">
+        <div class="lb-dot" style="background:${e.color}"></div>
+        <div class="lb-name">${idx+1}. ${e.name}</div>
         <div class="lb-score">${e.score}</div>
       </div>
     `).join('');
@@ -1084,19 +1137,10 @@
     const rank = sorted.findIndex(e => e.isPlayer) + 1;
 
     const panel = document.getElementById('screen-content');
-    // リザルト画面のHTML構造をリッチに
     panel.innerHTML = `
-      <div class="result-header">TIME UP!</div>
-      <div class="result-body">
-        <div class="result-rank-box">
-          <span class="rank-label">RANK</span>
-          <span class="rank-val">${rank}<span class="rank-total">/${entities.length}</span></span>
-        </div>
-        <div class="result-score-box">
-          <span class="score-label">FINAL SCORE</span>
-          <span class="score-val">${player().score}</span>
-        </div>
-      </div>
+      <p class="title">TIME UP!</p>
+      <div class="result-rank">RANK: ${rank} / ${entities.length}</div>
+      <div class="result-score">FINAL SCORE: ${player().score}</div>
       <button id="retryBtn">PLAY AGAIN</button>
     `;
     document.getElementById('overlay').classList.remove('hidden');
@@ -1105,9 +1149,8 @@
 
   function showTitle() {
     const panel = document.getElementById('screen-content');
-    // タイトル画面のHTML構造をリッチに
     panel.innerHTML = `
-      <div class="title-logo">CITY<br><span class="highlight">HOLE</span></div>
+      <p class="title">CITY <span>HOLE</span></p>
       <p class="desc">指でスライドして街を飲み込め。<br>大きなライバルからは逃げろ！</p>
       <button id="startBtn">START</button>
     `;
