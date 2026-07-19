@@ -424,9 +424,13 @@ function resetGame() {
   entities.forEach(e => { e.position.set((Math.random()-0.5)*400, 0, (Math.random()-0.5)*400); e.r = CONFIG.INIT_R; e.score = 0; updateEntityMesh(e); });
   player().position.set(0,0,0);
   initObjects();
-  score = 0; timeLeft = CONFIG.GAME_TIME; timerAccum = 0; running = true;
+  score = 0; timeLeft = CONFIG.GAME_TIME; timerAccum = 0;
   scoreVal.textContent = '0'; timeVal.textContent = String(CONFIG.GAME_TIME);
   timerBox.classList.remove('danger');
+}
+function startPlaying() {
+  resetGame();
+  running = true;
   document.getElementById('overlay').classList.add('hidden');
 }
 
@@ -512,10 +516,10 @@ function endGame() {
   const panel = document.getElementById('screen-content');
   panel.innerHTML = `<p class="title">TIME UP!</p><div class="result-rank">RANK: ${rank} / ${entities.length}</div><div class="result-score">FINAL SCORE: ${player().score}</div><button id="retryBtn">PLAY AGAIN</button>`;
   document.getElementById('overlay').classList.remove('hidden');
-  document.getElementById('retryBtn').addEventListener('click', resetGame);
+  document.getElementById('retryBtn').addEventListener('click', startPlaying);
 }
 
-document.getElementById('startBtn').addEventListener('click', resetGame);
+document.getElementById('startBtn').addEventListener('click', startPlaying);
 
 // ---------------- カメラ追従 ----------------
 function updateCamera() {
@@ -550,7 +554,6 @@ function loop(now) {
 }
 
 resetGame();
-running = false;
 document.getElementById('loading').style.display = 'none';
 requestAnimationFrame(loop);
 </script>
