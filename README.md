@@ -129,12 +129,7 @@
     OVERLAP_MARGIN: 0.9,      // 配置時に他オブジェクトとどこまで近づけて良いか(1で接触ギリギリ)
 
     // 重力方式:サイズ比の閾値ではなく、「対象の何割が穴の上に来たか」で自然に落ちる
-    GRAVITY_RANGE_MULT: 1.5,        // 穴の半径の何倍まで重力が届くか
-    GRAVITY_STRENGTH: 130,          // 重力の強さ
-    FALL_THRESHOLD_BASE: 0.5,       // 対象の面積の何割が穴の上に来たら落ちるか(基準)
-    FALL_THRESHOLD_ROUND_BONUS: 0.14, // 丸い物ほど閾値が下がる=落ちやすい
-
-    GROWTH_MULT: 34,   // 食べた時の成長量の係数(旧25→34、最大サイズに届きやすく)
+    GROWTH_MULT: 34,   // 食べた時の成長量の係数
 
     SPEED_MIN: 95,   // 小さい穴の速度
     SPEED_MAX: 270,  // 最大に近い穴の速度
@@ -542,62 +537,39 @@
         if (o.falling) continue;
         const round = o.type.round;
         const dist = Math.hypot(e.x - o.x, e.y - o.y);
-
-        // 重力:大きさに関わらず、近づいた物は穴に引き寄せられる。
-        // 大きい(重い)物ほど動きにくい。
-        const gravityRange = e.r * CONFIG.GRAVITY_RANGE_MULT;
-        if (dist < gravityRange) {
-          const closeness = 1 - dist / gravityRange;
-          const massFactor = 1 / (1 + o.type.r / e.r);
-          pullObjectToward(o, e, dt, CONFIG.GRAVITY_STRENGTH * closeness * massFactor);
-        }
-
         const isRoundFoot = round >= 0.7;
 
         if (isRoundFoot) {
-          // 丸い設置面:今まで通り面積の重なりで綺麗に落ちる(引っかからない)
-          const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
-          const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
-          const frac = overlapArea / (Math.PI * o.type.r * o.type.r);
-          o.strain = Math.max(0, Math.min(1, frac / threshold));
-          if (frac >= threshold) {
-            startFall(o, e, frac < threshold * 1.4);
+          // 丸い設置面:引っかからず、中心が穴に十分乗ったら素直に落ちる
+          if (dist < e.r * 0.72) {
+            startFall(o, e, false);
             o.topple = false;
           }
         } else {
-          // 角ばった設置面:縁を一歩でも越えたら、その瞬間から重心が傾いてリアルタイムに
-          // 回転し続ける。穴が離れれば起き上がって戻り、重心(頭)が穴の中心を越えて
-          // しまったら後戻りできず、そのまま回転して落ちる。
+          // 角ばった設置面:底面の4つの角それぞれで判定する。
+          // どれか1つでも穴に入った瞬間、その場で確定で倒れ始める。
+          // 倒れる軸(ピボット)は、まだ地面に残っている角。
           const fw = o.type.r * 0.85, fd = o.type.r * 0.55;
-          const perim = [[-fw,-fd],[0,-fd],[fw,-fd],[fw,0],[fw,fd],[0,fd],[-fw,fd],[-fw,0]];
-          let insideCount = 0; const outsidePts = [];
-          for (const [lx, ly] of perim) {
+          const corners = [[-fw,-fd],[fw,-fd],[fw,fd],[-fw,fd]];
+          let anyInside = false; const outsideCorners = [];
+          for (const [lx, ly] of corners) {
             const wx = o.x + lx, wy = o.y + ly;
-            if (Math.hypot(e.x - wx, e.y - wy) < e.r) insideCount++;
-            else outsidePts.push({ x: wx, y: wy });
+            if (Math.hypot(e.x - wx, e.y - wy) < e.r) anyInside = true;
+            else outsideCorners.push({ x: wx, y: wy });
           }
-          const frac = insideCount / perim.length;
-          o.strain = frac;
-
-          if (frac > 0 && outsidePts.length > 0) {
-            let px = 0, py = 0;
-            for (const p of outsidePts) { px += p.x; py += p.y; }
-            px /= outsidePts.length; py /= outsidePts.length;
-            const v1x = o.x - px, v1y = o.y - py, v2x = e.x - px, v2y = e.y - py;
-            const sign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
-            o.leanPivotX = px; o.leanPivotY = py; o.leanSign = sign;
-            const targetAngle = Math.min(frac / 0.85, 1) * (Math.PI * 0.42);
-            o.leanAngle += (targetAngle - o.leanAngle) * Math.min(1, dt * 7);
-          } else {
-            o.leanAngle += (0 - o.leanAngle) * Math.min(1, dt * 7);
-          }
-
-          // 重心が穴の中心の内側まで来てしまったら、もう起き上がれず落ちる
-          if (dist < e.r * 0.85) {
+          if (anyInside) {
+            let pivotX = o.x, pivotY = o.y, sign = 1;
+            if (outsideCorners.length > 0) {
+              pivotX = 0; pivotY = 0;
+              for (const p of outsideCorners) { pivotX += p.x; pivotY += p.y; }
+              pivotX /= outsideCorners.length; pivotY /= outsideCorners.length;
+              const v1x = o.x - pivotX, v1y = o.y - pivotY, v2x = e.x - pivotX, v2y = e.y - pivotY;
+              sign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
+            }
             startFall(o, e, true);
-            o.topple = true;
-            o.pivotX = o.leanPivotX; o.pivotY = o.leanPivotY; o.toppleSign = o.leanSign;
-            o.toppleStartAngle = o.leanAngle;
+            o.topple = outsideCorners.length > 0;
+            o.pivotX = pivotX; o.pivotY = pivotY; o.toppleSign = sign;
+            o.toppleStartAngle = 0;
           }
         }
 
@@ -1043,20 +1015,13 @@
       const rad = e.r * curZoom;
       const radY = rad * CONFIG.TILT_Y;
 
-      // 掘り返された地面の縁(ダート)
+      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
+      grad.addColorStop(0, '#000000');
+      grad.addColorStop(1, '#0d0d10');
       ctx.beginPath();
-      for (let i = 0; i <= 14; i++) {
-        const a = (i/14)*Math.PI*2;
-        const wob = e.rim[i % e.rim.length];
-        const rx = sx + Math.cos(a)*rad*1.06*wob, ry = sy + Math.sin(a)*radY*1.06*wob;
-        if (i===0) ctx.moveTo(rx,ry); else ctx.lineTo(rx,ry);
-      }
-      ctx.closePath();
-      ctx.fillStyle = shade('#6f9c46', -0.25);
+      ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2);
+      ctx.fillStyle = grad;
       ctx.fill();
-
-      drawCrater(sx, sy, rad, radY, e.rim);
-      drawRubble(sx, sy, rad, radY, e.rubble);
 
       ctx.strokeStyle = e.color; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, rad*0.045);
       ctx.beginPath(); ctx.ellipse(sx, sy, rad*1.01, radY*1.01, 0, 0, Math.PI*2); ctx.stroke();
@@ -1104,20 +1069,6 @@
       let sx = toSX(curX); let sy = toSY(curY);
       const checkR = o.type.h * curZoom * 2;
       if (sx < -checkR || sx > W + checkR || sy < -checkR || sy > H + checkR) continue;
-
-      const isRoundShape = o.type.round >= 0.7;
-      if (!o.falling && isRoundShape && o.strain > 0) {
-        sx += Math.sin(performance.now() * 0.025 + o.seed) * o.strain * 3 * curZoom;
-      }
-
-      // 角ばった物のリアルタイムな傾き(まだ落ちていない間も、縁を越えた分だけ常時傾く)
-      if (!o.falling && !isRoundShape && o.leanAngle > 0.01) {
-        ctx.save();
-        const lpx = toSX(o.leanPivotX), lpy = toSY(o.leanPivotY);
-        ctx.translate(lpx, lpy);
-        ctx.rotate(o.leanAngle * o.leanSign);
-        ctx.translate(-lpx, -lpy);
-      }
 
       if (o.falling && o.topple) {
         ctx.save();
@@ -1179,7 +1130,6 @@
 
       if (squeezing) ctx.restore();
       if (o.falling && o.topple) ctx.restore();
-      if (!o.falling && !isRoundShape && o.leanAngle > 0.01) ctx.restore();
     }
 
     if (isPointerDown) {
