@@ -286,7 +286,8 @@
     const obj = {
       type: t, x, y,
       falling: false, fallT: 0, eater: null, startX: 0, startY: 0,
-      seed: Math.random() * 1000, strain: 0, _wasStrained: false
+      seed: Math.random() * 1000, strain: 0, _wasStrained: false,
+      leanAngle: 0, leanPivotX: x, leanPivotY: y, leanSign: 1
     };
     if (t.kind === 'walker') {
       obj.patrolCenterX = x; obj.patrolCenterY = y;
@@ -551,47 +552,53 @@
           pullObjectToward(o, e, dt, CONFIG.GRAVITY_STRENGTH * closeness * massFactor);
         }
 
-        // 落下判定:設置面の形(丸い物は円、角ばった物は矩形として近似)に対して
-        // 「何割が穴の上に来ているか」で自然に決まる
         const isRoundFoot = round >= 0.7;
-        const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
-        let frac, outsidePoints = null;
 
         if (isRoundFoot) {
+          // 丸い設置面:今まで通り面積の重なりで綺麗に落ちる(引っかからない)
+          const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
           const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
-          frac = overlapArea / (Math.PI * o.type.r * o.type.r);
+          const frac = overlapArea / (Math.PI * o.type.r * o.type.r);
+          o.strain = Math.max(0, Math.min(1, frac / threshold));
+          if (frac >= threshold) {
+            startFall(o, e, frac < threshold * 1.4);
+            o.topple = false;
+          }
         } else {
+          // 角ばった設置面:縁を一歩でも越えたら、その瞬間から重心が傾いてリアルタイムに
+          // 回転し続ける。穴が離れれば起き上がって戻り、重心(頭)が穴の中心を越えて
+          // しまったら後戻りできず、そのまま回転して落ちる。
           const fw = o.type.r * 0.85, fd = o.type.r * 0.55;
-          const pts = [
-            [-fw,-fd],[0,-fd],[fw,-fd],
-            [-fw,0],[0,0],[fw,0],
-            [-fw,fd],[0,fd],[fw,fd]
-          ];
-          let inside = 0; outsidePoints = [];
-          for (const [lx, ly] of pts) {
+          const perim = [[-fw,-fd],[0,-fd],[fw,-fd],[fw,0],[fw,fd],[0,fd],[-fw,fd],[-fw,0]];
+          let insideCount = 0; const outsidePts = [];
+          for (const [lx, ly] of perim) {
             const wx = o.x + lx, wy = o.y + ly;
-            const pd = Math.hypot(e.x - wx, e.y - wy);
-            if (pd < e.r) inside++; else outsidePoints.push({ x: wx, y: wy });
+            if (Math.hypot(e.x - wx, e.y - wy) < e.r) insideCount++;
+            else outsidePts.push({ x: wx, y: wy });
           }
-          frac = inside / pts.length;
-        }
+          const frac = insideCount / perim.length;
+          o.strain = frac;
 
-        o.strain = Math.max(0, Math.min(1, frac / threshold));
-
-        if (frac >= threshold) {
-          const tight = frac < threshold * 1.4;
-          let topple = false, pivotX = o.x, pivotY = o.y, toppleSign = 1;
-          if (!isRoundFoot && outsidePoints && outsidePoints.length > 0) {
-            pivotX = 0; pivotY = 0;
-            for (const p of outsidePoints) { pivotX += p.x; pivotY += p.y; }
-            pivotX /= outsidePoints.length; pivotY /= outsidePoints.length;
-            const v1x = o.x - pivotX, v1y = o.y - pivotY;
-            const v2x = e.x - pivotX, v2y = e.y - pivotY;
-            toppleSign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
-            topple = true;
+          if (frac > 0 && outsidePts.length > 0) {
+            let px = 0, py = 0;
+            for (const p of outsidePts) { px += p.x; py += p.y; }
+            px /= outsidePts.length; py /= outsidePts.length;
+            const v1x = o.x - px, v1y = o.y - py, v2x = e.x - px, v2y = e.y - py;
+            const sign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
+            o.leanPivotX = px; o.leanPivotY = py; o.leanSign = sign;
+            const targetAngle = Math.min(frac / 0.85, 1) * (Math.PI * 0.42);
+            o.leanAngle += (targetAngle - o.leanAngle) * Math.min(1, dt * 7);
+          } else {
+            o.leanAngle += (0 - o.leanAngle) * Math.min(1, dt * 7);
           }
-          startFall(o, e, tight);
-          o.topple = topple; o.pivotX = pivotX; o.pivotY = pivotY; o.toppleSign = toppleSign;
+
+          // 重心が穴の中心の内側まで来てしまったら、もう起き上がれず落ちる
+          if (dist < e.r * 0.85) {
+            startFall(o, e, true);
+            o.topple = true;
+            o.pivotX = o.leanPivotX; o.pivotY = o.leanPivotY; o.toppleSign = o.leanSign;
+            o.toppleStartAngle = o.leanAngle;
+          }
         }
 
         // 地図の外に出ないように保険
@@ -782,10 +789,90 @@
   }
 
   // 複雑な構造の建物:非対称な増築部分があり、穴に引っかかりやすい印象を出す
+  function drawHydrant(sx, sy, t, scale, fallT) {
+    // 郵便ポスト:丸胴+スロット+てっぺんの蓋
+    drawCylinder(sx, sy, t.r * 0.65, t.h * 0.75, '#c0392b', scale, fallT);
+    drawCylinder(sx, sy - t.h * curZoom * scale * 0.72, t.r * 0.72, t.r * 0.22, '#a5281e', scale, fallT);
+    ctx.save();
+    ctx.globalAlpha = 1 - fallT * 0.6;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    const slotW = t.r * 0.5 * curZoom * scale, slotH = t.r * 0.08 * curZoom * scale;
+    ctx.fillRect(sx - slotW/2, sy - t.h*curZoom*scale*0.58, slotW, slotH);
+    ctx.restore();
+  }
+  function drawLamp(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r * 0.11, t.h, '#33363f', scale, fallT);
+    const poleTopY = sy - t.h * curZoom * scale * 0.95;
+    const armLen = t.r * 0.95 * curZoom * scale;
+    ctx.save();
+    ctx.globalAlpha = 1 - fallT * 0.6;
+    ctx.strokeStyle = '#33363f';
+    ctx.lineWidth = Math.max(1.5, t.r * 0.09 * curZoom * scale);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sx, poleTopY);
+    ctx.lineTo(sx + armLen, poleTopY - t.r * 0.22 * curZoom * scale);
+    ctx.stroke();
+    const lampX = sx + armLen, lampY = poleTopY - t.r * 0.3 * curZoom * scale;
+    const lampR = t.r * 0.55 * curZoom * scale;
+    const glow = ctx.createRadialGradient(lampX, lampY, 0, lampX, lampY, lampR * 1.8);
+    glow.addColorStop(0, 'rgba(255,244,200,0.85)');
+    glow.addColorStop(1, 'rgba(255,244,200,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(lampX, lampY, lampR * 1.8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff6d8';
+    ctx.beginPath(); ctx.arc(lampX, lampY, lampR * 0.55, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#2a2d34'; ctx.lineWidth = Math.max(1, t.r*0.06*curZoom*scale);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // 戸建て:三角屋根・煙突・窓・玄関ドアがある家
+  function drawHouse2(sx, sy, t, scale, fallT) {
+    const wallH = t.h * 0.62;
+    drawBox(sx, sy, t.r * 1.5, wallH, t.col, scale, fallT);
+    const halfW = t.r * 1.5 * curZoom * scale * 0.5;
+    const eaveY = sy - t.h * curZoom * scale * 0.6;
+    const roofTopY = eaveY - t.r * 0.6 * curZoom * scale;
+    ctx.save();
+    ctx.globalAlpha = 1 - fallT * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(sx - halfW * 1.1, eaveY);
+    ctx.lineTo(sx + halfW * 1.1, eaveY);
+    ctx.lineTo(sx, roofTopY);
+    ctx.closePath();
+    ctx.fillStyle = '#8a4a3a';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(160,210,255,0.85)';
+    const winY = sy - t.h * curZoom * scale * 0.35;
+    ctx.fillRect(sx - halfW*0.65, winY - halfW*0.14, halfW*0.34, halfW*0.3);
+    ctx.fillRect(sx + halfW*0.32, winY - halfW*0.14, halfW*0.34, halfW*0.3);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth=1;
+    ctx.strokeRect(sx - halfW*0.65, winY - halfW*0.14, halfW*0.34, halfW*0.3);
+    ctx.strokeRect(sx + halfW*0.32, winY - halfW*0.14, halfW*0.34, halfW*0.3);
+    ctx.fillStyle = '#5c3a26';
+    ctx.fillRect(sx - halfW*0.14, sy - halfW*0.1, halfW*0.28, halfW*0.62);
+    ctx.restore();
+    drawBox(sx + halfW*0.55, eaveY + halfW*0.1, t.r*0.16, t.h*0.32, '#7a6a5a', scale, fallT);
+  }
   function drawComplex(sx, sy, t, scale, fallT) {
-    drawBox(sx, sy, t.r * 1.5, t.h, t.col, scale, fallT);
+    const w = t.r * 1.5, h = t.h;
+    drawBox(sx, sy, w, h, t.col, scale, fallT);
     const off = t.r * 0.85 * curZoom * scale;
     drawBox(sx + off, sy + off * 0.4, t.r * 0.85, t.h * 0.55, shade(t.col, -0.12), scale, fallT);
+    // バルコニー(段ごとに小さく張り出す板)
+    ctx.save();
+    ctx.globalAlpha = 1 - fallT * 0.6;
+    const halfW = w * curZoom * scale * 0.5;
+    const topY = sy - h * curZoom * scale * 0.85;
+    for (let i = 0; i < 3; i++) {
+      const by = topY + i * h * curZoom * scale * 0.24;
+      ctx.fillStyle = shade(t.col, 0.05);
+      ctx.fillRect(sx - halfW*0.7, by, halfW*1.4, h*curZoom*scale*0.03);
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
+      ctx.strokeRect(sx - halfW*0.7, by, halfW*1.4, h*curZoom*scale*0.03);
+    }
+    ctx.restore();
   }
   function drawComplexTower(sx, sy, t, scale, fallT) {
     drawBox(sx, sy, t.r * 1.25, t.h, t.col, scale, fallT);
@@ -814,10 +901,10 @@
   }
   function drawCrater(sx, sy, rad, radY, rim) {
     const SEGS = 14;
-    const RING_T = [1.0, 0.7, 0.4, 0.16];
+    const RING_T = [1.0, 0.6];
     for (let ring = 0; ring < RING_T.length - 1; ring++) {
       const rimOuter = ring === 0 ? rim : null;
-      const depthDark = -0.05 - ring * 0.19;
+      const depthDark = -0.02 - ring * 0.22;
       for (let i = 0; i < SEGS; i++) {
         const p1 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i, SEGS);
         const p2 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i+1, SEGS);
@@ -832,9 +919,14 @@
         ctx.fill();
       }
     }
+    // 中は真っ暗闇。ここが主役になるよう、大きめの黒い円で占める
+    const voidGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad*RING_T[RING_T.length-1]);
+    voidGrad.addColorStop(0, '#000000');
+    voidGrad.addColorStop(0.85, '#05070a');
+    voidGrad.addColorStop(1, '#0d1116');
     ctx.beginPath();
-    ctx.ellipse(sx, sy, rad*RING_T[RING_T.length-1]*0.9, radY*RING_T[RING_T.length-1]*0.9, 0, 0, Math.PI*2);
-    ctx.fillStyle = '#07090b';
+    ctx.ellipse(sx, sy, rad*RING_T[RING_T.length-1], radY*RING_T[RING_T.length-1], 0, 0, Math.PI*2);
+    ctx.fillStyle = voidGrad;
     ctx.fill();
   }
   function drawRubble(sx, sy, rad, radY, rubble) {
@@ -893,13 +985,16 @@
     for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-    // 車線の破線
+    // 車線の破線(ワールド座標基準でパターンを固定し、カメラ移動でずれないようにする)
     ctx.strokeStyle = COLORS.roadLine;
     ctx.lineWidth = 3 * curZoom;
+    const dashPeriod = 26 * curZoom;
     ctx.setLineDash([14*curZoom, 12*curZoom]);
+    ctx.lineDashOffset = ((-toSY(0) % dashPeriod) + dashPeriod) % dashPeriod;
     for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
+    ctx.lineDashOffset = ((-toSX(0) % dashPeriod) + dashPeriod) % dashPeriod;
     for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
@@ -995,7 +1090,8 @@
         if (o.topple) {
           curX = o.startX; curY = o.startY;
           scale = 1 - ease * 0.8;
-          toppleAngle = ease * Math.PI * 0.5 * o.toppleSign;
+          const startA = o.toppleStartAngle || 0;
+          toppleAngle = (startA + ease * (Math.PI * 1.15 - startA)) * o.toppleSign;
           pivotSx = toSX(o.pivotX); pivotSy = toSY(o.pivotY);
         } else {
           curX = o.startX + (o.eater.x - o.startX) * ease;
@@ -1009,8 +1105,18 @@
       const checkR = o.type.h * curZoom * 2;
       if (sx < -checkR || sx > W + checkR || sy < -checkR || sy > H + checkR) continue;
 
-      if (!o.falling && o.strain > 0) {
+      const isRoundShape = o.type.round >= 0.7;
+      if (!o.falling && isRoundShape && o.strain > 0) {
         sx += Math.sin(performance.now() * 0.025 + o.seed) * o.strain * 3 * curZoom;
+      }
+
+      // 角ばった物のリアルタイムな傾き(まだ落ちていない間も、縁を越えた分だけ常時傾く)
+      if (!o.falling && !isRoundShape && o.leanAngle > 0.01) {
+        ctx.save();
+        const lpx = toSX(o.leanPivotX), lpy = toSY(o.leanPivotY);
+        ctx.translate(lpx, lpy);
+        ctx.rotate(o.leanAngle * o.leanSign);
+        ctx.translate(-lpx, -lpy);
       }
 
       if (o.falling && o.topple) {
@@ -1057,6 +1163,8 @@
         drawBox(sx, sy, t.r*0.8, t.h, '#ecf0f1', scale, o.fallT);
       } else if (t.id === 'silo') {
         drawSilo(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'house') {
+        drawHouse2(sx, sy, t, scale, o.fallT);
       } else if (t.id === 'complex') {
         drawComplex(sx, sy, t, scale, o.fallT);
       } else if (t.id === 'towerRound') {
@@ -1071,6 +1179,7 @@
 
       if (squeezing) ctx.restore();
       if (o.falling && o.topple) ctx.restore();
+      if (!o.falling && !isRoundShape && o.leanAngle > 0.01) ctx.restore();
     }
 
     if (isPointerDown) {
