@@ -141,6 +141,8 @@
 
     SPEED_MIN: 60,   // 小さい穴の速度(遅め)
     SPEED_MAX: 230,  // 最大に近い穴の速度(速め)
+
+    TILT_Y: 0.8,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
   };
   const WORLD_SIZE = CONFIG.WORLD_SIZE;
   const INIT_R = 15;
@@ -451,6 +453,15 @@
 
         if (ratio < CONFIG.EAT_MIN_RATIO) {
           o.strain = Math.max(0, o.strain - dt * 2.5);
+          // 淵に当たる感覚:食べられない相手でも、穴の縁が触れたら軽く押しのけられる
+          const bumpR = e.r + o.type.r * 0.3;
+          if (dist < bumpR) {
+            const bdx = o.x - e.x, bdy = o.y - e.y;
+            const bd = Math.hypot(bdx, bdy) || 1;
+            const overlap = bumpR - dist;
+            o.x += (bdx / bd) * overlap * 0.4;
+            o.y += (bdy / bd) * overlap * 0.4;
+          }
         } else {
           // 丸い物ほど「余裕判定」に入りやすい(丸は綺麗に吸い込める)
           const easyRatio = CONFIG.EAT_EASY_RATIO - (round - 0.5) * 0.3;
@@ -484,6 +495,10 @@
           e.y -= (dy / d) * 10;
         }
         o._wasStrained = o.strain > 0.4;
+
+        // 押し引きで地図の外に出ないように保険
+        o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
+        o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
       }
 
       for (const other of entities) {
@@ -551,12 +566,13 @@
     return "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
   }
 
+  // 斜め見下ろし視点:高さのある物は常に同じ方向へ傾く(放射状ではなく一方向)
+  const LEAN_X = 0.16;
+  const LEAN_Y = -0.6;
   function getTopPos(sx, sy, h) {
-    const cx = W / 2; const cy = H / 2;
-    const perspective = 0.0018;
     return {
-      tx: sx + (sx - cx) * (h * perspective),
-      ty: sy + (sy - cy) * (h * perspective)
+      tx: sx + h * LEAN_X,
+      ty: sy + h * LEAN_Y
     };
   }
 
@@ -681,18 +697,19 @@
     ctx.fillRect(0, 0, W, H);
 
     function toSX(x) { return (x - camX) * curZoom + W/2; }
-    function toSY(y) { return (y - camY) * curZoom + H/2; }
+    function toSY(y) { return (y - camY) * curZoom * CONFIG.TILT_Y + H/2; }
 
-    const gridSize = 250 * curZoom;
-    const offX = toSX(0) % gridSize;
-    const offY = toSY(0) % gridSize;
+    const gridSizeX = 250 * curZoom;
+    const gridSizeY = 250 * curZoom * CONFIG.TILT_Y;
+    const offX = toSX(0) % gridSizeX;
+    const offY = toSY(0) % gridSizeY;
     ctx.strokeStyle = COLORS.road;
     ctx.lineWidth = 30 * curZoom;
     ctx.lineCap = 'square';
-    for (let x = offX - gridSize; x < W + gridSize; x += gridSize) {
+    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
-    for (let y = offY - gridSize; y < H + gridSize; y += gridSize) {
+    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
@@ -701,17 +718,19 @@
       const sx = toSX(e.x); const sy = toSY(e.y);
       const rad = e.r * curZoom;
 
+      const radY = rad * CONFIG.TILT_Y;
+
       ctx.fillStyle = e.color;
-      ctx.beginPath(); ctx.arc(sx, sy, rad + 4 * curZoom, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, rad + 4*curZoom, radY + 4*curZoom, 0, 0, Math.PI*2); ctx.fill();
 
       const grad = ctx.createRadialGradient(sx, sy, rad*0.3, sx, sy, rad);
       grad.addColorStop(0, '#0a0e17');
       grad.addColorStop(1, '#1c2836');
       ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2); ctx.fill();
 
       ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = Math.max(2, rad*0.1);
-      ctx.beginPath(); ctx.arc(sx, sy, rad, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2); ctx.stroke();
 
       if (!e.isPlayer) {
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
