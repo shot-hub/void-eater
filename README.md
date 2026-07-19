@@ -647,7 +647,11 @@
   // 斜め見下ろし視点:高さのある物は常に同じ方向へ傾く(放射状ではなく一方向)
   const LEAN_X = 0.16;
   const LEAN_Y = -0.6;
+  // 倒れ込む時だけ、傾く方向と高さを差し替えるためのオーバーライド
+  let leanOverride = null;   // {x,y} 穴の方向へのリーン
+  let heightMulOverride = null; // 1→0 で高さを潰し、寝転がせる
   function getTopPos(sx, sy, h) {
+    if (leanOverride) return { tx: sx + h * leanOverride.x, ty: sy + h * leanOverride.y };
     return {
       tx: sx + h * LEAN_X,
       ty: sy + h * LEAN_Y
@@ -676,8 +680,9 @@
   }
 
   function drawBox(sx, sy, w, h, col, scale, fallT) {
+    const hMul = heightMulOverride === null ? 1 : heightMulOverride;
     const size = w * curZoom * scale * 0.5;
-    const actualH = h * curZoom * scale;
+    const actualH = h * curZoom * scale * hMul;
     drawCastShadow(sx, sy, size, size*0.7, actualH);
     const { tx, ty } = getTopPos(sx, sy, actualH);
 
@@ -699,8 +704,9 @@
   }
 
   function drawCylinder(sx, sy, r, h, col, scale, fallT) {
+    const hMul = heightMulOverride === null ? 1 : heightMulOverride;
     const size = r * curZoom * scale;
-    const actualH = h * curZoom * scale;
+    const actualH = h * curZoom * scale * hMul;
     drawCastShadow(sx, sy, size, size*0.7, actualH);
     const { tx, ty } = getTopPos(sx, sy, actualH);
 
@@ -1049,15 +1055,11 @@
       }
 
       let curX = o.x, curY = o.y, scale = 1;
-      let toppleAngle = 0, pivotSx = 0, pivotSy = 0;
       if (o.falling && o.eater) {
         const ease = o.fallT * o.fallT;
         if (o.topple) {
           curX = o.startX; curY = o.startY;
-          scale = 1 - ease * 0.8;
-          const startA = o.toppleStartAngle || 0;
-          toppleAngle = (startA + ease * (Math.PI * 1.15 - startA)) * o.toppleSign;
-          pivotSx = toSX(o.pivotX); pivotSy = toSY(o.pivotY);
+          scale = 1; // 底面は縮めない(縮小=吸い込まれて見える原因だったため撤廃)
         } else {
           curX = o.startX + (o.eater.x - o.startX) * ease;
           curY = o.startY + (o.eater.y - o.startY) * ease;
@@ -1071,10 +1073,16 @@
       if (sx < -checkR || sx > W + checkR || sy < -checkR || sy > H + checkR) continue;
 
       if (o.falling && o.topple) {
-        ctx.save();
-        ctx.translate(pivotSx, pivotSy);
-        ctx.rotate(toppleAngle);
-        ctx.translate(-pivotSx, -pivotSy);
+        const ease = o.fallT * o.fallT;
+        const holeSx = toSX(o.eater.x), holeSy = toSY(o.eater.y);
+        const ddx = holeSx - sx, ddy = holeSy - sy;
+        const dlen = Math.hypot(ddx, ddy) || 1;
+        // 近づかれた方向(穴の方向)へ、だんだん寝転がるように倒れ込む
+        leanOverride = {
+          x: LEAN_X + (ddx/dlen*1.35 - LEAN_X) * ease,
+          y: LEAN_Y + (ddy/dlen*1.35 - LEAN_Y) * ease
+        };
+        heightMulOverride = 1 - ease; // 高さがだんだん潰れて寝ていく(縮小ではなく倒れる)
       }
 
       const squeezing = o.falling && o.tight && !o.topple;
@@ -1129,7 +1137,8 @@
       }
 
       if (squeezing) ctx.restore();
-      if (o.falling && o.topple) ctx.restore();
+      leanOverride = null;
+      heightMulOverride = null;
     }
 
     if (isPointerDown) {
