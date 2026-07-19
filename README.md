@@ -148,17 +148,23 @@ const edgeGeoV = new THREE.BoxGeometry(6, 8, CONFIG.WORLD_SIZE + 20);
 });
 
 // ---------------- 穴(プレイヤー / CPU) ----------------
-const holeCircleGeo = new THREE.CircleGeometry(1, 40);
+const pitGeo = new THREE.CylinderGeometry(1, 0.72, 1, 40, 1, true);
+const pitFloorGeo = new THREE.CircleGeometry(0.74, 40);
 const BOT_COLORS = [0xff9f43, 0xee5253, 0x5f27cd];
 const BOT_NAMES = ['CPU 1', 'CPU 2', 'CPU 3'];
 
+function pitDepthFor(r) { return 40 + r * 0.6; }
+
 function makeEntity(isPlayer, idx) {
   const color = isPlayer ? 0x00d2d3 : BOT_COLORS[idx % BOT_COLORS.length];
-  const mat = new THREE.MeshBasicMaterial({ color: 0x030303 });
-  const mesh = new THREE.Mesh(holeCircleGeo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = 0.08;
-  scene.add(mesh);
+  // 穴の内側の壁(見下ろした時に「潜っていく空間」が実際に見える筒状の穴)
+  const pitMat = new THREE.MeshStandardMaterial({ color: 0x050505, side: THREE.BackSide, roughness: 1 });
+  const pit = new THREE.Mesh(pitGeo, pitMat);
+  scene.add(pit);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x020202 });
+  const floor = new THREE.Mesh(pitFloorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
   const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.98, 1.05, 40), ringMat);
   ring.rotation.x = -Math.PI / 2;
@@ -166,7 +172,7 @@ function makeEntity(isPlayer, idx) {
   scene.add(ring);
   return {
     isPlayer, name: isPlayer ? 'YOU' : BOT_NAMES[idx % BOT_NAMES.length], colorHex: color,
-    mesh, ring, position: new THREE.Vector3(0, 0, 0), r: CONFIG.INIT_R,
+    pit, floor, ring, position: new THREE.Vector3(0, 0, 0), r: CONFIG.INIT_R,
     vx: 0, vz: 0, score: 0, wanderAngle: Math.random() * Math.PI * 2, wanderT: 0, target: null
   };
 }
@@ -179,8 +185,11 @@ function speedFor(r) {
   return CONFIG.SPEED_MIN + Math.pow(t, 0.55) * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
 }
 function updateEntityMesh(e) {
-  e.mesh.position.set(e.position.x, 0.08, e.position.z);
-  e.mesh.scale.set(e.r, e.r, 1);
+  const depth = pitDepthFor(e.r);
+  e.pit.position.set(e.position.x, -depth / 2, e.position.z);
+  e.pit.scale.set(e.r, depth, e.r);
+  e.floor.position.set(e.position.x, -depth + 0.05, e.position.z);
+  e.floor.scale.set(e.r * 0.74, e.r * 0.74, 1);
   e.ring.position.set(e.position.x, 0.09, e.position.z);
   e.ring.scale.set(e.r, e.r, 1);
 }
@@ -198,9 +207,95 @@ const TYPES = [
   { id: 'bench', hw: 14, hd: 7, height: 24, round: false, pts: 8, build: buildBench },
   { id: 'tree', hw: 18, hd: 18, height: 42, round: true, pts: 16, build: buildTree },
   { id: 'car', hw: 22, hd: 12, height: 24, round: false, pts: 24, build: buildCar },
-  { id: 'silo', hw: 34, hd: 34, height: 58, round: true, pts: 40, build: buildSilo },
-  { id: 'house', hw: 46, hd: 34, height: 54, round: false, pts: 70, build: buildHouse },
+  { id: 'kiosk', hw: 28, hd: 22, height: 34, round: false, pts: 34, build: buildKiosk },
+  { id: 'silo', hw: 34, hd: 34, height: 58, round: true, pts: 46, build: buildSilo },
+  { id: 'house', hw: 46, hd: 34, height: 54, round: false, pts: 68, build: buildHouse },
+  { id: 'tank', hw: 60, hd: 60, height: 70, round: true, pts: 100, build: buildTank },
+  { id: 'office', hw: 80, hd: 60, height: 105, round: false, pts: 155, build: buildOffice },
+  { id: 'towerRound', hw: 105, hd: 105, height: 175, round: true, pts: 225, build: buildTowerRound },
+  { id: 'towerBox', hw: 135, hd: 105, height: 205, round: false, pts: 300, build: buildTowerBox },
+  { id: 'landmark', hw: 190, hd: 155, height: 255, round: false, pts: 430, build: buildLandmark },
 ];
+
+function buildKiosk(t) {
+  const g = new THREE.Group();
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, 22, t.hd*2), stdMat(0x8b6ad6));
+  wall.position.y = 11; wall.castShadow = true; wall.receiveShadow = true;
+  g.add(wall);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(t.hw*1.2, 12, 4), stdMat(0xac8148));
+  roof.rotation.y = Math.PI/4; roof.position.y = 22+6; roof.castShadow = true;
+  g.add(roof);
+  return g;
+}
+function buildTank(t) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(t.hw, t.hw, 62, 20), stdMat(0x9aa7b5));
+  body.position.y = 31; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(t.hw, 20, 12, 0, Math.PI*2, 0, Math.PI/2), stdMat(shadeHex(0x9aa7b5, 0.15)));
+  dome.position.y = 62; dome.castShadow = true;
+  g.add(dome);
+  return g;
+}
+function buildOffice(t) {
+  const g = new THREE.Group();
+  const wallH = 90;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, wallH, t.hd*2), stdMat(0x767c8f));
+  wall.position.y = wallH/2; wall.castShadow = true; wall.receiveShadow = true;
+  g.add(wall);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0xffe08c, emissive: 0x554422, emissiveIntensity: 0.3 });
+  for (let row=0; row<4; row++) {
+    for (let col=-1; col<=1; col++) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(t.hw*0.32, wallH*0.12, 2), winMat);
+      w.position.set(col*t.hw*0.6, 12+row*18, t.hd+1);
+      g.add(w);
+    }
+  }
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2.05, 4, t.hd*2.05), stdMat(shadeHex(0x767c8f,0.2)));
+  cap.position.y = wallH+2; cap.castShadow = true;
+  g.add(cap);
+  return g;
+}
+function buildTowerRound(t) {
+  const g = new THREE.Group();
+  const h = 160;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(t.hw*0.8, t.hw, h, 20), stdMat(0x4b6584));
+  body.position.y = h/2; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(2,2,20,8), stdMat(0x9096a6));
+  antenna.position.y = h+10; antenna.castShadow = true;
+  g.add(antenna);
+  return g;
+}
+function buildTowerBox(t) {
+  const g = new THREE.Group();
+  const h = 190;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, h, t.hd*2), stdMat(0x2f3542));
+  wall.position.y = h/2; wall.castShadow = true; wall.receiveShadow = true;
+  g.add(wall);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(t.hw*1.1, h*0.6, t.hd*1.1), stdMat(shadeHex(0x2f3542,-0.1)));
+  wing.position.set(t.hw*0.9, h*0.3, -t.hd*0.4); wing.castShadow = true;
+  g.add(wing);
+  const spire = new THREE.Mesh(new THREE.CylinderGeometry(2,2,30,8), stdMat(0xff5555));
+  spire.position.y = h+15; spire.castShadow = true;
+  g.add(spire);
+  return g;
+}
+function buildLandmark(t) {
+  const g = new THREE.Group();
+  const baseH = 90;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(t.hw, t.hw*1.05, baseH, 24), stdMat(0xc0975a));
+  base.position.y = baseH/2; base.castShadow = true; base.receiveShadow = true;
+  g.add(base);
+  const towerH = 140;
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(t.hw*1.1, towerH, t.hd*1.1), stdMat(shadeHex(0xc0975a,0.12)));
+  tower.position.y = baseH + towerH/2; tower.castShadow = true;
+  g.add(tower);
+  const spireTip = new THREE.Mesh(new THREE.ConeGeometry(6, 25, 8), stdMat(0xffd24d));
+  spireTip.position.y = baseH+towerH+12; spireTip.castShadow = true;
+  g.add(spireTip);
+  return g;
+}
 
 function buildCone(t) {
   const g = new THREE.Group();
@@ -402,7 +497,7 @@ function updateFalling(dt) {
     if (!o.topple) {
       // 垂直に落ちる(縮小はしない、沈むだけ)
       const t = Math.min(o.fallT, 1);
-      o.pivot.position.y = -t * 60;
+      o.pivot.position.y = -t * pitDepthFor(o.eater.r) * 0.85;
       if (t > 0.55) {
         const alpha = 1 - (t - 0.55) / 0.45;
         o.model.traverse(m => { if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); } });
@@ -439,7 +534,7 @@ function updateFalling(dt) {
       const t = Math.min(o.fallT, 1);
       const angle = o.startAngle + t * (Math.PI * 0.62 - o.startAngle);
       o.pivot.quaternion.setFromAxisAngle(o.fallAxis, angle);
-      o.pivot.position.y = -t * 60;
+      o.pivot.position.y = -t * pitDepthFor(o.eater.r) * 0.85;
       if (t > 0.55) {
         const alpha = 1 - (t - 0.55) / 0.45;
         o.model.traverse(m => { if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); } });
@@ -495,7 +590,7 @@ const lbEl = document.getElementById('lb');
 function updateScoreUI() { score = player().score; scoreVal.textContent = score; }
 
 function resetGame() {
-  entities.forEach(e => { scene.remove(e.mesh); scene.remove(e.ring); });
+  entities.forEach(e => { scene.remove(e.pit); scene.remove(e.floor); scene.remove(e.ring); });
   entities = [];
   entities.push(makeEntity(true, 0));
   for (let i = 0; i < CONFIG.NUM_BOTS; i++) entities.push(makeEntity(false, i));
