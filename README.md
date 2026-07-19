@@ -194,12 +194,12 @@ function shadeHex(hex, amt) {
 function stdMat(color) { return new THREE.MeshStandardMaterial({ color }); }
 
 const TYPES = [
-  { id: 'cone', hw: 6, hd: 6, round: false, pts: 3, build: buildCone },
-  { id: 'bench', hw: 14, hd: 7, round: false, pts: 8, build: buildBench },
-  { id: 'tree', hw: 18, hd: 18, round: true, pts: 16, build: buildTree },
-  { id: 'car', hw: 22, hd: 12, round: false, pts: 24, build: buildCar },
-  { id: 'silo', hw: 34, hd: 34, round: true, pts: 40, build: buildSilo },
-  { id: 'house', hw: 46, hd: 34, round: false, pts: 70, build: buildHouse },
+  { id: 'cone', hw: 6, hd: 6, height: 22, round: false, pts: 3, build: buildCone },
+  { id: 'bench', hw: 14, hd: 7, height: 24, round: false, pts: 8, build: buildBench },
+  { id: 'tree', hw: 18, hd: 18, height: 42, round: true, pts: 16, build: buildTree },
+  { id: 'car', hw: 22, hd: 12, height: 24, round: false, pts: 24, build: buildCar },
+  { id: 'silo', hw: 34, hd: 34, height: 58, round: true, pts: 40, build: buildSilo },
+  { id: 'house', hw: 46, hd: 34, height: 54, round: false, pts: 70, build: buildHouse },
 ];
 
 function buildCone(t) {
@@ -281,12 +281,15 @@ function spawnObjectAt(x, z) {
   const t = pickType();
   const model = t.build(t);
   const pivot = new THREE.Group();
-  model.position.set(x, 0, z);
+  model.position.set(0, 0, 0);
+  pivot.position.set(x, 0, z);
   pivot.add(model);
   scene.add(pivot);
   objects.push({
     type: t, x, z, model, pivot,
-    falling: false, fallT: 0, eater: null, topple: false, fallAxis: null
+    leanAngle: 0, leanCorners: 0,
+    falling: false, committed: false, caught: false,
+    fallT: 0, eater: null, topple: false, fallAxis: null, startAngle: 0, catchAngle: 0
   });
 }
 function initObjects() {
@@ -304,48 +307,90 @@ function respawnObject(old) {
   const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
   spawnObjectAt(x, z);
 }
+function resetLean(o) {
+  o.pivot.position.set(o.x, 0, o.z);
+  o.model.position.set(0, 0, 0);
+  o.pivot.quaternion.identity();
+  o.leanAngle = 0; o.leanCorners = 0;
+}
 
 function addArea(e, area) {
   const cur = Math.PI * e.r * e.r;
   e.r = Math.min(CONFIG.MAX_R, Math.sqrt((cur + area) / Math.PI));
 }
 
-function triggerFall(o, e) {
-  const halfW = o.type.hw, halfD = o.type.hd;
-  let pivotPos;
-  if (o.type.round) {
-    pivotPos = new THREE.Vector3(o.x, 0, o.z);
-    o.topple = false;
-  } else {
-    const corners = [[-halfW,-halfD],[halfW,-halfD],[halfW,halfD],[-halfW,halfD]];
-    const outside = [];
-    for (const [lx, lz] of corners) {
-      const wx = o.x + lx, wz = o.z + lz;
-      const d = Math.hypot(wx - e.position.x, wz - e.position.z);
-      if (d >= e.r) outside.push({ x: wx, z: wz });
-    }
-    if (outside.length > 0) {
-      let px = 0, pz = 0;
-      for (const c of outside) { px += c.x; pz += c.z; }
-      px /= outside.length; pz /= outside.length;
-      pivotPos = new THREE.Vector3(px, 0, pz);
-      o.topple = true;
-    } else {
-      pivotPos = new THREE.Vector3(o.x, 0, o.z);
-      o.topple = false;
-    }
-  }
+// 倒れる向きの回転軸(穴の方向Dへ正しく倒れ込む向き)
+function fallAxisToward(pivotX, pivotZ, targetX, targetZ) {
+  const dx = targetX - pivotX, dz = targetZ - pivotZ;
+  const dlen = Math.hypot(dx, dz) || 1;
+  const Dx = dx / dlen, Dz = dz / dlen;
+  return new THREE.Vector3(Dz, 0, -Dx);
+}
 
+function commitStraightDrop(o, e) {
+  o.falling = true; o.committed = true; o.topple = false; o.fallT = 0; o.eater = e;
+}
+function commitTopple(o, e, pivotPos) {
   o.pivot.position.copy(pivotPos);
   o.model.position.set(o.x - pivotPos.x, 0, o.z - pivotPos.z);
+  o.fallAxis = fallAxisToward(pivotPos.x, pivotPos.z, e.position.x, e.position.z);
+  o.startAngle = o.leanAngle;
 
-  if (o.topple) {
-    const dirX = e.position.x - pivotPos.x, dirZ = e.position.z - pivotPos.z;
-    const dlen = Math.hypot(dirX, dirZ) || 1;
-    o.fallAxis = new THREE.Vector3(-dirZ / dlen, 0, dirX / dlen);
+  const D = 2 * e.r; // 穴の直径(この瞬間でスナップショット)
+  const L = o.type.height;
+  if (L >= D) {
+    o.caught = true;
+    o.catchAngle = Math.asin(Math.min(1, D / L)) * 0.94; // 縁で止まる角度
+  } else {
+    o.caught = false;
+  }
+  o.falling = true; o.committed = true; o.topple = true; o.fallT = 0; o.eater = e;
+}
+
+// 底面がどれだけ穴の円に入っているかで重心を計算し、リアルタイムに傾ける。
+// 中心(重心)が穴を越えたら後戻りできず確定する。
+function updateLeanPhysics(o, e) {
+  const halfW = o.type.hw, halfD = o.type.hd;
+  const corners = [[-halfW,-halfD],[halfW,-halfD],[halfW,halfD],[-halfW,halfD]];
+  let insideCount = 0; const outside = [];
+  for (const [lx, lz] of corners) {
+    const wx = o.x + lx, wz = o.z + lz;
+    const d = Math.hypot(wx - e.position.x, wz - e.position.z);
+    if (d < e.r) insideCount++; else outside.push({ x: wx, z: wz });
   }
 
-  o.falling = true; o.fallT = 0; o.eater = e;
+  if (insideCount === 0) {
+    if (o.leanAngle > 0.001) { resetLean(o); }
+    return;
+  }
+
+  if (insideCount === 4) {
+    // 円が底面よりずっと大きい:一瞬で全部入るので、倒れる猶予がなく垂直に落ちる
+    commitStraightDrop(o, e);
+    return;
+  }
+
+  // 1〜3角が入っている:重心方向へ連続的に(可逆的に)傾ける
+  let px = 0, pz = 0;
+  for (const c of outside) { px += c.x; pz += c.z; }
+  px /= outside.length; pz /= outside.length;
+
+  const MAX_LEAN = Math.PI * 0.24;
+  const targetAngle = (insideCount / 4) * MAX_LEAN;
+  o.leanAngle += (targetAngle - o.leanAngle) * 0.25;
+  o.leanCorners = insideCount;
+
+  const pivotPos = new THREE.Vector3(px, 0, pz);
+  o.pivot.position.copy(pivotPos);
+  o.model.position.set(o.x - pivotPos.x, 0, o.z - pivotPos.z);
+  const axis = fallAxisToward(px, pz, e.position.x, e.position.z);
+  o.pivot.quaternion.setFromAxisAngle(axis, o.leanAngle);
+
+  // 重心(中心)が穴の内側まで来てしまったら、もう起き上がれない
+  const centerDist = Math.hypot(o.x - e.position.x, o.z - e.position.z);
+  if (centerDist < e.r) {
+    commitTopple(o, e, pivotPos);
+  }
 }
 
 function updateFalling(dt) {
@@ -353,29 +398,62 @@ function updateFalling(dt) {
     const o = objects[i];
     if (!o.falling) continue;
     o.fallT += dt / 0.9;
-    const t = Math.min(o.fallT, 1);
-    if (o.topple) {
-      o.pivot.quaternion.setFromAxisAngle(o.fallAxis, t * Math.PI * 0.58);
+
+    if (!o.topple) {
+      // 垂直に落ちる(縮小はしない、沈むだけ)
+      const t = Math.min(o.fallT, 1);
+      o.pivot.position.y = -t * 60;
+      if (t > 0.55) {
+        const alpha = 1 - (t - 0.55) / 0.45;
+        o.model.traverse(m => { if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); } });
+      }
+      if (o.fallT >= 1) {
+        o.eater.score += o.type.pts;
+        addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT);
+        if (o.eater.isPlayer) updateScoreUI();
+        respawnObject(o); objects.splice(i, 1);
+      }
+      continue;
+    }
+
+    if (o.caught) {
+      // 縁に引っかかって、途中まで倒れて起き上がる(食べられない)
+      const riseStart = 0.45, holdEnd = 0.62;
+      let angle;
+      if (o.fallT < riseStart) {
+        const tt = o.fallT / riseStart;
+        angle = o.startAngle + tt * (o.catchAngle - o.startAngle);
+      } else if (o.fallT < holdEnd) {
+        angle = o.catchAngle;
+      } else {
+        const tt = Math.min(1, (o.fallT - holdEnd) / (1 - holdEnd));
+        angle = o.catchAngle * (1 - tt);
+      }
+      o.pivot.quaternion.setFromAxisAngle(o.fallAxis, angle);
+      if (o.fallT >= 1) {
+        o.falling = false; o.committed = false; o.caught = false;
+        resetLean(o);
+      }
     } else {
-      o.model.scale.setScalar(1 - t);
-    }
-    o.pivot.position.y = -t * 60;
-    const fadeStart = 0.6;
-    if (t > fadeStart) {
-      const alpha = 1 - (t - fadeStart) / (1 - fadeStart);
-      o.model.traverse(m => {
-        if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); }
-      });
-    }
-    if (o.fallT >= 1) {
-      o.eater.score += o.type.pts;
-      addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT);
-      if (o.eater.isPlayer) updateScoreUI();
-      respawnObject(o);
-      objects.splice(i, 1);
+      // 遮る物がないので、そのまま倒れ込んで穴に落ちる(縮小はしない、沈んで消える)
+      const t = Math.min(o.fallT, 1);
+      const angle = o.startAngle + t * (Math.PI * 0.62 - o.startAngle);
+      o.pivot.quaternion.setFromAxisAngle(o.fallAxis, angle);
+      o.pivot.position.y = -t * 60;
+      if (t > 0.55) {
+        const alpha = 1 - (t - 0.55) / 0.45;
+        o.model.traverse(m => { if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); } });
+      }
+      if (o.fallT >= 1) {
+        o.eater.score += o.type.pts;
+        addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT);
+        if (o.eater.isPlayer) updateScoreUI();
+        respawnObject(o); objects.splice(i, 1);
+      }
     }
   }
 }
+
 
 // ---------------- 入力(ジョイスティック) ----------------
 let joy = { active: false, ox: 0, oy: 0, dx: 0, dy: 0, mag: 0 };
@@ -489,16 +567,10 @@ function checkEating() {
       if (o.falling) continue;
       if (o.type.round) {
         const d = Math.hypot(o.x - e.position.x, o.z - e.position.z);
-        if (d < e.r * 0.72 && e.r > o.type.hw * 0.75) triggerFall(o, e);
+        if (d < e.r * 0.72 && e.r > o.type.hw * 0.75) commitStraightDrop(o, e);
       } else {
         if (e.r < o.type.hw * 0.55 && e.r < o.type.hd * 0.55) continue;
-        const corners = [[-o.type.hw,-o.type.hd],[o.type.hw,-o.type.hd],[o.type.hw,o.type.hd],[-o.type.hw,o.type.hd]];
-        let anyInside = false;
-        for (const [lx, lz] of corners) {
-          const d = Math.hypot(o.x+lx-e.position.x, o.z+lz-e.position.z);
-          if (d < e.r) { anyInside = true; break; }
-        }
-        if (anyInside) triggerFall(o, e);
+        updateLeanPhysics(o, e);
       }
     }
   }
