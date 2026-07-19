@@ -126,28 +126,25 @@
     NUM_BOTS: 3,
     OBJECT_GRID: 100,
     OBJECT_SKIP_CHANCE: 0.08,
+    OVERLAP_MARGIN: 0.9,      // 配置時に他オブジェクトとどこまで近づけて良いか(1で接触ギリギリ)
 
-    EAT_MIN_RATIO: 1.05,       // これ未満は完全にすり抜け
-    EAT_EASY_RATIO: 1.6,       // 基準の「余裕吸い込み」しきい値(丸い物ほど下がる)
+    // 重力方式:サイズ比の閾値ではなく、「対象の何割が穴の上に来たか」で自然に落ちる
+    GRAVITY_RANGE_MULT: 1.5,        // 穴の半径の何倍まで重力が届くか
+    GRAVITY_STRENGTH: 130,          // 重力の強さ
+    FALL_THRESHOLD_BASE: 0.5,       // 対象の面積の何割が穴の上に来たら落ちるか(基準)
+    FALL_THRESHOLD_ROUND_BONUS: 0.14, // 丸い物ほど閾値が下がる=落ちやすい
 
-    EASY_PULL_RADIUS_MULT: 1.15,
-    EASY_PULL_SPEED: 210,
-    EASY_FALL_TOLERANCE_MULT: 0.6,
+    GROWTH_MULT: 34,   // 食べた時の成長量の係数(旧25→34、最大サイズに届きやすく)
 
-    TIGHT_PULL_RADIUS_MULT: 0.9,
-    TIGHT_PULL_SPEED: 75,
-    TIGHT_BASE_TOLERANCE_MULT: 0.17,   // 角ばった物の基準許容
-    TIGHT_TOLERANCE_ROUND_BONUS: 0.18, // 丸い物ほど許容が広がる(最大 0.35)
+    SPEED_MIN: 95,   // 小さい穴の速度
+    SPEED_MAX: 270,  // 最大に近い穴の速度
 
-    SPEED_MIN: 60,   // 小さい穴の速度(遅め)
-    SPEED_MAX: 230,  // 最大に近い穴の速度(速め)
-
-    TILT_Y: 0.8,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
+    TILT_Y: 0.78,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
   };
   const WORLD_SIZE = CONFIG.WORLD_SIZE;
   const INIT_R = 15;
   const MAX_R = 400;
-  const GAME_TIME = 90;
+  const GAME_TIME = 130;
 
   const COLORS = {
     bg: '#e8ecef',
@@ -189,7 +186,7 @@
 
   let camX = WORLD_SIZE / 2;
   let camY = WORLD_SIZE / 2;
-  let curZoom = 1.5;
+  let curZoom = 1.8;
 
   let isPointerDown = false;
   let pointerX = W/2, pointerY = H/2;
@@ -226,7 +223,36 @@
     return CONFIG.SPEED_MIN + eased * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
   }
 
-  function spawnObject(x, y) {
+  // 簡易空間ハッシュ:大きい建物(直径最大750)にも対応できるバケット幅
+  const BUCKET = 400;
+  let spatialBuckets = new Map();
+  function bucketKeyOf(x, y) { return Math.floor(x / BUCKET) + ',' + Math.floor(y / BUCKET); }
+  function addToBuckets(obj) {
+    const key = bucketKeyOf(obj.x, obj.y);
+    if (!spatialBuckets.has(key)) spatialBuckets.set(key, new Set());
+    spatialBuckets.get(key).add(obj);
+    obj._bucketKey = key;
+  }
+  function removeFromBuckets(obj) {
+    const set = spatialBuckets.get(obj._bucketKey);
+    if (set) set.delete(obj);
+  }
+  function overlapsExisting(type, x, y) {
+    const bx = Math.floor(x / BUCKET), by = Math.floor(y / BUCKET);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const set = spatialBuckets.get((bx+dx) + ',' + (by+dy));
+        if (!set) continue;
+        for (const other of set) {
+          const d = Math.hypot(other.x - x, other.y - y);
+          if (d < (other.type.r + type.r) * CONFIG.OVERLAP_MARGIN) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function pickType() {
     const roll = Math.random();
     let type;
     if (roll < 0.15) type = 'person';
@@ -246,14 +272,15 @@
     else if (roll < 0.996) type = 'skyscraper';
     else if (roll < 0.9985) type = 'complexTower';
     else type = 'landmark';
+    return TYPES.find(tt => tt.id === type);
+  }
 
-    const t = TYPES.find(tt => tt.id === type);
+  function makeObject(t, x, y) {
     const obj = {
       type: t, x, y,
       falling: false, fallT: 0, eater: null, startX: 0, startY: 0,
       seed: Math.random() * 1000, strain: 0, _wasStrained: false
     };
-
     if (t.kind === 'walker') {
       obj.patrolCenterX = x; obj.patrolCenterY = y;
       obj.patrolR = 15 + Math.random() * 25;
@@ -272,18 +299,50 @@
       obj.vx = horiz ? (Math.random() < 0.5 ? spd : -spd) : 0;
       obj.vy = horiz ? 0 : (Math.random() < 0.5 ? spd : -spd);
     }
+    return obj;
+  }
+
+  // 食べられた後の再配置。近くで重ならない場所を探し、駄目なら周囲を広げて再挑戦
+  function spawnObject(x, y) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const t = pickType();
+      const spread = 150 + attempt * 60;
+      const px = Math.max(t.r + 5, Math.min(WORLD_SIZE - t.r - 5, x + (Math.random()-0.5) * spread));
+      const py = Math.max(t.r + 5, Math.min(WORLD_SIZE - t.r - 5, y + (Math.random()-0.5) * spread));
+      if (!overlapsExisting(t, px, py)) {
+        const obj = makeObject(t, px, py);
+        objects.push(obj);
+        addToBuckets(obj);
+        return;
+      }
+    }
+    // 最終手段:多少の重なりは許容して確実に配置する
+    const t = pickType();
+    const px = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
+    const py = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
+    const obj = makeObject(t, px, py);
     objects.push(obj);
+    addToBuckets(obj);
   }
 
   function initWorld() {
     objects = [];
+    spatialBuckets = new Map();
     const GRID = CONFIG.OBJECT_GRID;
     for (let x = GRID/2; x < WORLD_SIZE; x += GRID) {
       for (let y = GRID/2; y < WORLD_SIZE; y += GRID) {
         if (Math.random() < CONFIG.OBJECT_SKIP_CHANCE) continue;
-        const rx = x + (Math.random() - 0.5) * GRID * 0.8;
-        const ry = y + (Math.random() - 0.5) * GRID * 0.8;
-        spawnObject(rx, ry);
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const t = pickType();
+          const rx = x + (Math.random() - 0.5) * GRID * 0.9;
+          const ry = y + (Math.random() - 0.5) * GRID * 0.9;
+          if (rx - t.r < 5 || rx + t.r > WORLD_SIZE - 5 || ry - t.r < 5 || ry + t.r > WORLD_SIZE - 5) continue;
+          if (overlapsExisting(t, rx, ry)) continue;
+          const obj = makeObject(t, rx, ry);
+          objects.push(obj);
+          addToBuckets(obj);
+          break;
+        }
       }
     }
   }
@@ -304,7 +363,7 @@
     }
     camX = entities[0].x;
     camY = entities[0].y;
-    curZoom = 1.5;
+    curZoom = 1.8;
   }
 
   function addArea(e, area) {
@@ -319,6 +378,20 @@
     const move = Math.min(d, speed * dt);
     o.x += (dx / d) * move;
     o.y += (dy / d) * move;
+  }
+
+  // 2つの円の重なり面積(対象がどれだけ穴の上に来ているかを面積で判定するため)
+  function circleOverlapArea(d, r1, r2) {
+    if (d >= r1 + r2) return 0;
+    if (d <= Math.abs(r1 - r2)) { const m = Math.min(r1, r2); return Math.PI * m * m; }
+    if (d < 1e-6) d = 1e-6;
+    const r1sq = r1*r1, r2sq = r2*r2;
+    let a1 = (d*d + r1sq - r2sq) / (2*d*r1);
+    let a2 = (d*d + r2sq - r1sq) / (2*d*r2);
+    a1 = Math.max(-1, Math.min(1, a1));
+    a2 = Math.max(-1, Math.min(1, a2));
+    const alpha = Math.acos(a1), beta = Math.acos(a2);
+    return r1sq*(alpha - Math.sin(2*alpha)/2) + r2sq*(beta - Math.sin(2*beta)/2);
   }
 
   function startFall(o, e, tight) {
@@ -419,7 +492,7 @@
       if (!flee) {
         let minDist = Infinity;
         for (const o of objects) {
-          if (o.falling || bot.r <= o.type.r * CONFIG.EAT_MIN_RATIO) continue;
+          if (o.falling || bot.r < o.type.r * 0.7) continue;
           const d = Math.hypot(o.x - bot.x, o.y - bot.y);
           if (d < minDist && d < 400) { minDist = d; target = o; }
         }
@@ -441,62 +514,39 @@
 
     updateMovingObjects(dt);
 
-    // 当たり判定
+    // 当たり判定(重力方式)
     for (const e of entities) {
       if (e.respawnT > 0) continue;
 
       for (const o of objects) {
         if (o.falling) continue;
         const round = o.type.round;
-        const ratio = e.r / o.type.r;
         const dist = Math.hypot(e.x - o.x, e.y - o.y);
 
-        if (ratio < CONFIG.EAT_MIN_RATIO) {
-          o.strain = Math.max(0, o.strain - dt * 2.5);
-          // 淵に当たる感覚:食べられない相手でも、穴の縁が触れたら軽く押しのけられる
-          const bumpR = e.r + o.type.r * 0.3;
-          if (dist < bumpR) {
-            const bdx = o.x - e.x, bdy = o.y - e.y;
-            const bd = Math.hypot(bdx, bdy) || 1;
-            const overlap = bumpR - dist;
-            o.x += (bdx / bd) * overlap * 0.4;
-            o.y += (bdy / bd) * overlap * 0.4;
-          }
-        } else {
-          // 丸い物ほど「余裕判定」に入りやすい(丸は綺麗に吸い込める)
-          const easyRatio = CONFIG.EAT_EASY_RATIO - (round - 0.5) * 0.3;
-
-          if (ratio >= easyRatio) {
-            const pullR = e.r * CONFIG.EASY_PULL_RADIUS_MULT;
-            if (dist < pullR) {
-              pullObjectToward(o, e, dt, CONFIG.EASY_PULL_SPEED);
-              if (dist < e.r * CONFIG.EASY_FALL_TOLERANCE_MULT) startFall(o, e, false);
-            }
-            o.strain = Math.max(0, o.strain - dt * 2.5);
-          } else {
-            // ギリギリサイズ:丸いほど許容が広く、角ばっているほどシビア(=引っかかる)
-            const tolerance = CONFIG.TIGHT_BASE_TOLERANCE_MULT + CONFIG.TIGHT_TOLERANCE_ROUND_BONUS * round;
-            const pullR = e.r * CONFIG.TIGHT_PULL_RADIUS_MULT;
-            if (dist < pullR) {
-              pullObjectToward(o, e, dt, CONFIG.TIGHT_PULL_SPEED);
-              o.strain = Math.min(1, o.strain + dt * 2.2);
-              if (dist < e.r * tolerance) startFall(o, e, true);
-            } else {
-              o.strain = Math.max(0, o.strain - dt * 2.5);
-            }
-          }
+        // 重力:大きさに関わらず、近づいた物は穴に引き寄せられる。
+        // 大きい(重い)物ほど動きにくい。
+        const gravityRange = e.r * CONFIG.GRAVITY_RANGE_MULT;
+        if (dist < gravityRange) {
+          const closeness = 1 - dist / gravityRange;
+          const massFactor = 1 / (1 + o.type.r / e.r);
+          pullObjectToward(o, e, dt, CONFIG.GRAVITY_STRENGTH * closeness * massFactor);
         }
 
-        // 角ばった物を掴みかけて逃した時の「引っかかりジョルト」演出
-        if (o._wasStrained && o.strain <= 0.05 && round < 0.5 && !o.falling) {
-          const dx = e.x - o.x, dy = e.y - o.y;
-          const d = Math.hypot(dx, dy) || 1;
-          e.x -= (dx / d) * 10;
-          e.y -= (dy / d) * 10;
-        }
-        o._wasStrained = o.strain > 0.4;
+        // 落下判定:対象の面積のうち何割が穴の上に来ているかで自然に決まる
+        // (サイズ比のしきい値ではなく、丸い物ほど少ない割合で、角ばった物ほど
+        //  多くの割合が乗らないと落ちない)
+        const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
+        const frac = overlapArea / (Math.PI * o.type.r * o.type.r);
+        const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
 
-        // 押し引きで地図の外に出ないように保険
+        o.strain = Math.max(0, Math.min(1, frac / threshold));
+
+        if (frac >= threshold) {
+          const tight = frac < threshold * 1.4;
+          startFall(o, e, tight);
+        }
+
+        // 地図の外に出ないように保険
         o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
         o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
       }
@@ -523,8 +573,9 @@
         if (o.fallT >= 1) {
           const bonus = o.tight ? 1.5 : 1;
           o.eater.score += Math.round(o.type.pts * bonus);
-          addArea(o.eater, o.type.pts * 25 * (o.tight ? 1.2 : 1));
+          addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT * (o.tight ? 1.2 : 1));
           createPopParticles(o.x, o.y, o.eater.color, o.tight ? 26 : 15);
+          removeFromBuckets(o);
           objects.splice(i, 1);
           spawnObject(Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
         }
@@ -693,11 +744,22 @@
   }
 
   function draw() {
-    ctx.fillStyle = COLORS.bg;
+    ctx.fillStyle = '#1b1e24'; // マップ外(圏外)の色
     ctx.fillRect(0, 0, W, H);
 
     function toSX(x) { return (x - camX) * curZoom + W/2; }
     function toSY(y) { return (y - camY) * curZoom * CONFIG.TILT_Y + H/2; }
+
+    const wx0 = toSX(0), wy0 = toSY(0);
+    const ww = WORLD_SIZE * curZoom, wh = WORLD_SIZE * curZoom * CONFIG.TILT_Y;
+
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(wx0, wy0, ww, wh);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wx0, wy0, ww, wh);
+    ctx.clip();
 
     const gridSizeX = 250 * curZoom;
     const gridSizeY = 250 * curZoom * CONFIG.TILT_Y;
@@ -712,6 +774,18 @@
     for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
+    ctx.restore();
+
+    // マップの端をハザードテープ風の縞模様で明示する
+    ctx.save();
+    ctx.lineWidth = 16 * curZoom;
+    ctx.setLineDash([20 * curZoom, 20 * curZoom]);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.strokeRect(wx0, wy0, ww, wh);
+    ctx.lineDashOffset = 20 * curZoom;
+    ctx.strokeStyle = '#f9ca24';
+    ctx.strokeRect(wx0, wy0, ww, wh);
+    ctx.restore();
 
     for (const e of entities) {
       if (e.respawnT > 0) continue;
