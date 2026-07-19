@@ -120,14 +120,27 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // --- チューニング用コンフィグ(マップサイズ・密度・CPU数はここで調整) ---
+  // --- チューニング用コンフィグ ---
   const CONFIG = {
-    WORLD_SIZE: 3500,        // マップの大きさ(現状維持)
-    NUM_BOTS: 3,             // CPUの数(5→3に削減)
-    OBJECT_GRID: 100,        // オブジェクトの配置間隔。小さいほど密度が上がる(旧150)
-    OBJECT_SKIP_CHANCE: 0.08,// 各マスを空けにする確率。小さいほど密度が上がる(旧0.15)
-    EAT_MIN_RATIO: 1.05,     // これ未満のサイズ差は完全に食べられない(すり抜け)
-    EAT_EASY_RATIO: 1.6,     // これ以上サイズ差があれば「余裕で吸い込める」判定
+    WORLD_SIZE: 3500,
+    NUM_BOTS: 3,
+    OBJECT_GRID: 100,
+    OBJECT_SKIP_CHANCE: 0.08,
+
+    EAT_MIN_RATIO: 1.05,       // これ未満は完全にすり抜け
+    EAT_EASY_RATIO: 1.6,       // 基準の「余裕吸い込み」しきい値(丸い物ほど下がる)
+
+    EASY_PULL_RADIUS_MULT: 1.15,
+    EASY_PULL_SPEED: 210,
+    EASY_FALL_TOLERANCE_MULT: 0.6,
+
+    TIGHT_PULL_RADIUS_MULT: 0.9,
+    TIGHT_PULL_SPEED: 75,
+    TIGHT_BASE_TOLERANCE_MULT: 0.17,   // 角ばった物の基準許容
+    TIGHT_TOLERANCE_ROUND_BONUS: 0.18, // 丸い物ほど許容が広がる(最大 0.35)
+
+    SPEED_MIN: 60,   // 小さい穴の速度(遅め)
+    SPEED_MAX: 230,  // 最大に近い穴の速度(速め)
   };
   const WORLD_SIZE = CONFIG.WORLD_SIZE;
   const INIT_R = 15;
@@ -141,19 +154,26 @@
     bots: ['#ff9f43', '#ee5253', '#5f27cd', '#10ac84', '#ff6b81'],
   };
 
-  // 街のオブジェクト定義。kind が付いているものは動く/揺れる
+  // 街のオブジェクト定義。round: 1=丸くて綺麗に吸い込める / 0=角ばって引っかかりやすい
+  // サイズは細かい段階を用意し、穴がどの大きさでも「ギリギリ挑戦できる相手」が必ずいるようにする
   const TYPES = [
-    { id: 'person',     r: 3,  h: 8,   pts: 1,   col: '#f1c40f', kind: 'walker'    },
-    { id: 'dog',        r: 3,  h: 5,   pts: 3,   col: '#c0785a', kind: 'wanderer'  },
-    { id: 'balloon',    r: 5,  h: 16,  pts: 6,   col: '#ff6b9d', kind: 'floater'   },
-    { id: 'cone',       r: 4,  h: 6,   pts: 2,   col: '#e67e22', kind: 'static'    },
-    { id: 'bicycle',    r: 6,  h: 7,   pts: 4,   col: '#2c3e50', kind: 'static'    },
-    { id: 'bench',      r: 8,  h: 5,   pts: 5,   col: '#9b59b6', kind: 'static'    },
-    { id: 'tree',       r: 12, h: 25,  pts: 10,  col: '#2ecc71', kind: 'static'    },
-    { id: 'car',        r: 16, h: 12,  pts: 15,  col: '#3498db', kind: 'driver'    },
-    { id: 'house',      r: 30, h: 35,  pts: 40,  col: '#e74c3c', kind: 'static'    },
-    { id: 'building',   r: 55, h: 90,  pts: 100, col: '#95a5a6', kind: 'static'    },
-    { id: 'skyscraper', r: 90, h: 200, pts: 250, col: '#34495e', kind: 'static'    }
+    { id:'person',        r:3,   h:8,   pts:1,   col:'#f1c40f', kind:'walker',    round:0.5 },
+    { id:'dog',           r:4,   h:5,   pts:2,   col:'#c0785a', kind:'wanderer',  round:0.6 },
+    { id:'balloon',       r:5.5, h:16,  pts:4,   col:'#ff6b9d', kind:'floater',   round:1.0 },
+    { id:'cone',          r:7.5, h:6,   pts:3,   col:'#e67e22', kind:'static',    round:0.7 },
+    { id:'hydrant',       r:10,  h:9,   pts:6,   col:'#e74c3c', kind:'static',    round:0.7 },
+    { id:'bicycle',       r:14,  h:11,  pts:9,   col:'#2c3e50', kind:'static',    round:0.5 },
+    { id:'bench',         r:19,  h:6,   pts:13,  col:'#9b59b6', kind:'static',    round:0.2 },
+    { id:'lamp',          r:25,  h:22,  pts:18,  col:'#f9ca24', kind:'static',    round:0.7 },
+    { id:'tree',          r:34,  h:30,  pts:24,  col:'#2ecc71', kind:'static',    round:0.85},
+    { id:'car',           r:46,  h:14,  pts:32,  col:'#3498db', kind:'driver',    round:0.4 },
+    { id:'silo',          r:62,  h:60,  pts:45,  col:'#8395a7', kind:'static',    round:1.0 },
+    { id:'house',         r:84,  h:40,  pts:65,  col:'#e74c3c', kind:'static',    round:0.3 },
+    { id:'complex',       r:113, h:70,  pts:95,  col:'#57606f', kind:'static',    round:0.25},
+    { id:'towerRound',    r:153, h:150, pts:145, col:'#4b6584', kind:'static',    round:0.95},
+    { id:'skyscraper',    r:206, h:210, pts:210, col:'#34495e', kind:'static',    round:0.3 },
+    { id:'complexTower',  r:278, h:260, pts:320, col:'#2f3542', kind:'static',    round:0.25},
+    { id:'landmark',      r:375, h:320, pts:550, col:'#c0975a', kind:'static',    round:0.55},
   ];
 
   let objects = [];
@@ -197,26 +217,39 @@
 
   function player() { return entities[0]; }
 
+  // 穴のサイズに応じた移動速度:小さいうちは遅く、育つほど速くなる
+  function speedFor(r) {
+    const t = Math.max(0, Math.min(1, (r - INIT_R) / (MAX_R - INIT_R)));
+    const eased = Math.pow(t, 0.55);
+    return CONFIG.SPEED_MIN + eased * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
+  }
+
   function spawnObject(x, y) {
     const roll = Math.random();
     let type;
-    if (roll < 0.16) type = 'person';
-    else if (roll < 0.28) type = 'dog';
-    else if (roll < 0.38) type = 'balloon';
-    else if (roll < 0.48) type = 'cone';
-    else if (roll < 0.56) type = 'bicycle';
-    else if (roll < 0.64) type = 'bench';
-    else if (roll < 0.78) type = 'tree';
-    else if (roll < 0.89) type = 'car';
-    else if (roll < 0.95) type = 'house';
-    else if (roll < 0.985) type = 'building';
-    else type = 'skyscraper';
+    if (roll < 0.15) type = 'person';
+    else if (roll < 0.27) type = 'dog';
+    else if (roll < 0.37) type = 'balloon';
+    else if (roll < 0.46) type = 'cone';
+    else if (roll < 0.54) type = 'hydrant';
+    else if (roll < 0.61) type = 'bicycle';
+    else if (roll < 0.68) type = 'bench';
+    else if (roll < 0.75) type = 'lamp';
+    else if (roll < 0.85) type = 'tree';
+    else if (roll < 0.92) type = 'car';
+    else if (roll < 0.955) type = 'silo';
+    else if (roll < 0.975) type = 'house';
+    else if (roll < 0.985) type = 'complex';
+    else if (roll < 0.991) type = 'towerRound';
+    else if (roll < 0.996) type = 'skyscraper';
+    else if (roll < 0.9985) type = 'complexTower';
+    else type = 'landmark';
 
     const t = TYPES.find(tt => tt.id === type);
     const obj = {
       type: t, x, y,
       falling: false, fallT: 0, eater: null, startX: 0, startY: 0,
-      seed: Math.random() * 1000, strain: 0
+      seed: Math.random() * 1000, strain: 0, _wasStrained: false
     };
 
     if (t.kind === 'walker') {
@@ -278,7 +311,6 @@
     e.r = Math.min(MAX_R, Math.sqrt(newArea / Math.PI));
   }
 
-  // 対象を穴の中心へじわっと引き寄せる(吸い込みの気持ちよさの核)
   function pullObjectToward(o, e, dt, speed) {
     const dx = e.x - o.x, dy = e.y - o.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -295,7 +327,6 @@
     o.tight = tight;
   }
 
-  // 動く/揺れるオブジェクトの移動更新
   function updateMovingObjects(dt) {
     for (const o of objects) {
       if (o.falling) continue;
@@ -341,7 +372,7 @@
         p.r = INIT_R; p.score = Math.floor(p.score / 2);
       }
     } else {
-      const speed = Math.max(90, 260 - p.r * 0.4);
+      const speed = speedFor(p.r);
       if (isPointerDown) {
         const dx = pointerX - joyCenter.x;
         const dy = pointerY - joyCenter.y;
@@ -368,7 +399,7 @@
         continue;
       }
 
-      const speed = Math.max(90, 260 - bot.r * 0.4);
+      const speed = speedFor(bot.r);
       let target = null;
       let flee = false;
 
@@ -412,35 +443,49 @@
     for (const e of entities) {
       if (e.respawnT > 0) continue;
 
-      // オブジェクトを食べる — サイズ比で「余裕吸い込み」と「ギリギリ挑戦」を分ける
       for (const o of objects) {
         if (o.falling) continue;
+        const round = o.type.round;
         const ratio = e.r / o.type.r;
-        if (ratio < CONFIG.EAT_MIN_RATIO) { o.strain = Math.max(0, o.strain - dt*2.5); continue; }
-
         const dist = Math.hypot(e.x - o.x, e.y - o.y);
 
-        if (ratio >= CONFIG.EAT_EASY_RATIO) {
-          // 十分小さい: 広めの範囲から気持ちよく吸い込む
-          const pullR = e.r * 1.25;
-          if (dist < pullR) {
-            pullObjectToward(o, e, dt, 160);
-            if (dist < e.r * 0.7) startFall(o, e, false);
-          }
+        if (ratio < CONFIG.EAT_MIN_RATIO) {
+          o.strain = Math.max(0, o.strain - dt * 2.5);
         } else {
-          // ギリギリサイズ: ほぼ中心に合わせないと落ちない「入るか入らないか」の挑戦
-          const pullR = e.r * 0.9;
-          if (dist < pullR) {
-            pullObjectToward(o, e, dt, 55);
-            o.strain = Math.min(1, o.strain + dt * 2.2);
-            if (dist < e.r * 0.24) startFall(o, e, true);
-          } else {
+          // 丸い物ほど「余裕判定」に入りやすい(丸は綺麗に吸い込める)
+          const easyRatio = CONFIG.EAT_EASY_RATIO - (round - 0.5) * 0.3;
+
+          if (ratio >= easyRatio) {
+            const pullR = e.r * CONFIG.EASY_PULL_RADIUS_MULT;
+            if (dist < pullR) {
+              pullObjectToward(o, e, dt, CONFIG.EASY_PULL_SPEED);
+              if (dist < e.r * CONFIG.EASY_FALL_TOLERANCE_MULT) startFall(o, e, false);
+            }
             o.strain = Math.max(0, o.strain - dt * 2.5);
+          } else {
+            // ギリギリサイズ:丸いほど許容が広く、角ばっているほどシビア(=引っかかる)
+            const tolerance = CONFIG.TIGHT_BASE_TOLERANCE_MULT + CONFIG.TIGHT_TOLERANCE_ROUND_BONUS * round;
+            const pullR = e.r * CONFIG.TIGHT_PULL_RADIUS_MULT;
+            if (dist < pullR) {
+              pullObjectToward(o, e, dt, CONFIG.TIGHT_PULL_SPEED);
+              o.strain = Math.min(1, o.strain + dt * 2.2);
+              if (dist < e.r * tolerance) startFall(o, e, true);
+            } else {
+              o.strain = Math.max(0, o.strain - dt * 2.5);
+            }
           }
         }
+
+        // 角ばった物を掴みかけて逃した時の「引っかかりジョルト」演出
+        if (o._wasStrained && o.strain <= 0.05 && round < 0.5 && !o.falling) {
+          const dx = e.x - o.x, dy = e.y - o.y;
+          const d = Math.hypot(dx, dy) || 1;
+          e.x -= (dx / d) * 10;
+          e.y -= (dy / d) * 10;
+        }
+        o._wasStrained = o.strain > 0.4;
       }
 
-      // 他プレイヤーを食べる
       for (const other of entities) {
         if (other === e || other.respawnT > 0) continue;
         if (e.r > other.r * 1.25) {
@@ -455,7 +500,6 @@
       }
     }
 
-    // 落下アニメーション処理(ギリギリ吸い込みは少しゆっくり・ご褒美つき)
     for (let i = objects.length - 1; i >= 0; i--) {
       const o = objects[i];
       if (o.falling) {
@@ -482,7 +526,7 @@
     if (p.respawnT <= 0) {
       camX += (p.x - camX) * dt * 4.0;
       camY += (p.y - camY) * dt * 4.0;
-      const targetZoom = Math.max(0.18, 1.8 / Math.pow(p.r / INIT_R, 0.6));
+      const targetZoom = Math.max(0.16, 1.8 / Math.pow(p.r / INIT_R, 0.6));
       curZoom += (targetZoom - curZoom) * dt * 3.0;
     }
 
@@ -566,9 +610,9 @@
     ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.stroke();
 
     ctx.globalAlpha = 1.0;
+    return { tx, ty };
   }
 
-  // ふわふわ浮くバルーン(非・箱型シェイプ)
   function drawBalloon(sx, sy, t, scale, fallT) {
     ctx.save();
     ctx.globalAlpha = 1 - fallT * 0.6;
@@ -584,20 +628,52 @@
     ctx.restore();
   }
 
-  // 自転車(非・箱型シェイプ)
+  // 自転車:実際に押し出された(立体の)ホイール2つ+フレーム+サドルで構成
   function drawBicycle(sx, sy, t, scale, fallT) {
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    const rad = t.r * 0.55 * curZoom * scale;
-    const wx1 = sx - t.r * 0.75 * curZoom * scale, wx2 = sx + t.r * 0.75 * curZoom * scale;
-    ctx.strokeStyle = shade(t.col, -0.1); ctx.lineWidth = Math.max(1.5, rad * 0.28);
-    ctx.beginPath(); ctx.arc(wx1, sy, rad, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(wx2, sy, rad, 0, Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = t.col; ctx.lineWidth = Math.max(1.5, rad*0.3);
-    ctx.beginPath();
-    ctx.moveTo(wx1, sy); ctx.lineTo(sx, sy - rad*1.5); ctx.lineTo(wx2, sy); ctx.lineTo(sx, sy - rad*1.5);
-    ctx.stroke();
-    ctx.restore();
+    const sep = t.r * 0.85 * curZoom * scale;
+    const wheelR = t.r * 0.42;
+    const wheelH = t.r * 0.14;
+    const wx1 = sx - sep, wx2 = sx + sep;
+    drawCylinder(wx1, sy, wheelR, wheelH, '#1c2026', scale, fallT);
+    drawCylinder(wx2, sy, wheelR, wheelH, '#1c2026', scale, fallT);
+    const frameY = sy - wheelH * curZoom * scale * 0.5;
+    drawBox(sx, frameY, t.r * 1.4, t.r * 0.28, t.col, scale, fallT);
+    drawCylinder(sx + t.r*0.25*curZoom*scale, frameY, t.r * 0.11, t.r * 0.85, shade(t.col, -0.25), scale, fallT);
+  }
+
+  // 円柱状の建物:輪郭が丸いので、穴にすっと綺麗にはまる感触を出す
+  function drawSilo(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r, t.h, t.col, scale, fallT);
+    drawCylinder(sx, sy, t.r * 0.97, t.h * 0.5, shade(t.col, 0.18), scale, fallT);
+  }
+  function drawTowerRound(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r * 0.8, t.h, t.col, scale, fallT);
+    drawCylinder(sx, sy, t.r * 0.55, t.h * 1.12, shade(t.col, 0.2), scale, fallT);
+  }
+
+  // 複雑な構造の建物:非対称な増築部分があり、穴に引っかかりやすい印象を出す
+  function drawComplex(sx, sy, t, scale, fallT) {
+    drawBox(sx, sy, t.r * 1.5, t.h, t.col, scale, fallT);
+    const off = t.r * 0.85 * curZoom * scale;
+    drawBox(sx + off, sy + off * 0.4, t.r * 0.85, t.h * 0.55, shade(t.col, -0.12), scale, fallT);
+  }
+  function drawComplexTower(sx, sy, t, scale, fallT) {
+    drawBox(sx, sy, t.r * 1.25, t.h, t.col, scale, fallT);
+    const off = t.r * 0.8 * curZoom * scale;
+    drawBox(sx - off, sy + off * 0.35, t.r * 0.78, t.h * 0.6, shade(t.col, -0.15), scale, fallT);
+    drawCylinder(sx, sy - t.h * curZoom * scale * 0.55, t.r * 0.1, t.r * 1.3, '#ff5555', scale, fallT);
+  }
+  function drawLandmark(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r, t.h * 0.35, t.col, scale, fallT);
+    drawBox(sx, sy, t.r * 0.55, t.h, shade(t.col, 0.12), scale, fallT);
+    drawCylinder(sx, sy - t.h * curZoom * scale * 0.9, t.r * 0.11, t.r * 1.1, '#ffd24d', scale, fallT);
+  }
+  function drawHydrant(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r * 0.75, t.h, t.col, scale, fallT);
+  }
+  function drawLamp(sx, sy, t, scale, fallT) {
+    drawCylinder(sx, sy, t.r * 0.15, t.h, '#3d4150', scale, fallT);
+    drawCylinder(sx, sy - t.h * curZoom * scale * 0.85, t.r * 0.5, t.r * 0.5, t.col, scale, fallT);
   }
 
   function draw() {
@@ -671,7 +747,6 @@
       const checkR = o.type.h * curZoom * 2;
       if (sx < -checkR || sx > W + checkR || sy < -checkR || sy > H + checkR) continue;
 
-      // ギリギリ挑戦中(まだ落ちてない)は、揺れて「押し込もうとしている」感を出す
       if (!o.falling && o.strain > 0) {
         sx += Math.sin(performance.now() * 0.025 + o.seed) * o.strain * 3 * curZoom;
       }
@@ -697,16 +772,30 @@
         drawCylinder(hx, hy, t.r*0.55, t.h*0.9, shade(t.col, 0.15), scale, o.fallT);
       } else if (t.id === 'balloon') {
         drawBalloon(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'bicycle') {
-        drawBicycle(sx, sy, t, scale, o.fallT);
       } else if (t.id === 'cone') {
         drawCylinder(sx, sy, t.r, t.h, t.col, scale, o.fallT);
+      } else if (t.id === 'hydrant') {
+        drawHydrant(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'bicycle') {
+        drawBicycle(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'lamp') {
+        drawLamp(sx, sy, t, scale, o.fallT);
       } else if (t.id === 'tree') {
         drawCylinder(sx, sy, t.r*0.3, t.h*0.4, '#a0522d', scale, o.fallT);
         drawBox(sx, sy, t.r*1.8, t.h, t.col, scale, o.fallT);
       } else if (t.id === 'car') {
         drawBox(sx, sy, t.r*1.5, t.h*0.5, t.col, scale, o.fallT);
         drawBox(sx, sy, t.r*0.8, t.h, '#ecf0f1', scale, o.fallT);
+      } else if (t.id === 'silo') {
+        drawSilo(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'complex') {
+        drawComplex(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'towerRound') {
+        drawTowerRound(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'complexTower') {
+        drawComplexTower(sx, sy, t, scale, o.fallT);
+      } else if (t.id === 'landmark') {
+        drawLandmark(sx, sy, t, scale, o.fallT);
       } else {
         drawBox(sx, sy, t.r*1.6, t.h, t.col, scale, o.fallT);
       }
