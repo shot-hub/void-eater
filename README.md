@@ -5,19 +5,41 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>CITY HOLE - 街を飲み込め</title>
+<!-- モダンなゲーム風フォントの読み込み -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,900;1,900&family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+
 <style>
   :root {
     --bg: #87ceeb;
-    --panel: rgba(255, 255, 255, 0.95);
-    --text: #2c3e50;
-    --accent: #00d2d3;
-    --accent-dark: #00a8a8;
+    
+    /* 令和モダンUI用カラーパレット */
+    --glass-bg: rgba(20, 25, 40, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    
+    --text-main: #ffffff;
+    --text-sub: #a0aec0;
+    
+    --accent-1: #00f2fe;
+    --accent-2: #4facfe;
+    --accent-glow: rgba(79, 172, 254, 0.5);
+    
+    --danger: #ff4757;
+    --danger-glow: rgba(255, 71, 87, 0.6);
+    
+    --gold: #ffd700;
+    --silver: #c0c0c0;
+    --bronze: #cd7f32;
   }
+
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
     background: var(--bg); overflow: hidden;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Nunito', sans-serif; /* ベースフォント */
     touch-action: none; user-select: none;
   }
   canvas { display: block; width: 100%; height: 100%; }
@@ -26,63 +48,187 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 10;
   }
 
+  /* --- HUD (スコア＆タイマー) --- */
   .hud {
     position: absolute; top: 20px; left: 20px; right: 20px;
     display: flex; justify-content: space-between; align-items: flex-start;
   }
   .hud-box {
-    background: var(--panel); border-radius: 16px;
-    padding: 10px 24px; text-align: center;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 12px 28px;
+    text-align: center;
+    box-shadow: var(--glass-shadow);
+    color: var(--text-main);
+    transition: all 0.3s ease;
   }
   .hud-label {
-    font-size: 12px; font-weight: 800; color: #95a5a6; letter-spacing: 1px; margin-bottom: 2px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 13px; font-weight: 900; color: var(--text-sub);
+    letter-spacing: 2px; margin-bottom: 4px;
+    text-transform: uppercase;
   }
   .hud-value {
-    font-size: 28px; font-weight: 900; color: var(--text);
+    font-family: 'Montserrat', sans-serif;
+    font-size: 32px; font-weight: 900;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
   }
-  #timer-box.danger .hud-value { color: #e74c3c; }
+  
+  /* タイマー警告時 */
+  #timer-box.danger {
+    background: rgba(255, 71, 87, 0.25);
+    border-color: rgba(255, 71, 87, 0.5);
+    animation: pulseDanger 1s infinite;
+  }
+  #timer-box.danger .hud-value { color: var(--danger); text-shadow: 0 0 15px var(--danger-glow); }
+  
+  @keyframes pulseDanger {
+    0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.5); }
+    70% { box-shadow: 0 0 0 20px rgba(255, 71, 87, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); }
+  }
 
+  /* --- リーダーボード --- */
   .leaderboard {
-    position: absolute; top: 90px; right: 20px;
-    background: var(--panel); border-radius: 16px; padding: 12px 16px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-    min-width: 160px;
+    position: absolute; top: 110px; right: 20px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px; padding: 16px 20px;
+    box-shadow: var(--glass-shadow);
+    min-width: 200px;
+    color: var(--text-main);
   }
   .lb-row {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 8px; font-size: 14px; font-weight: 700; color: #7f8c8d;
+    display: flex; align-items: center;
+    margin-bottom: 12px; font-size: 15px; font-weight: 800;
+    opacity: 0.85; transition: opacity 0.2s;
   }
   .lb-row:last-child { margin-bottom: 0; }
-  .lb-row.me { color: var(--accent); }
-  .lb-dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+  .lb-row.me { 
+    opacity: 1; 
+    background: linear-gradient(90deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+    padding: 4px 8px; border-radius: 8px; margin-left: -8px;
+  }
+  
+  .lb-rank { font-family: 'Montserrat', sans-serif; width: 24px; text-align: left; font-size: 14px; color: var(--text-sub); }
+  .lb-row.rank-1 .lb-rank { color: var(--gold); font-size: 16px; text-shadow: 0 0 8px rgba(255,215,0,0.5); }
+  .lb-row.rank-2 .lb-rank { color: var(--silver); }
+  .lb-row.rank-3 .lb-rank { color: var(--bronze); }
+  
+  .lb-dot { width: 14px; height: 14px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.8); }
   .lb-name { flex: 1; text-align: left; }
-  .lb-score { font-family: monospace; font-size: 15px; }
+  .lb-score { font-family: 'Montserrat', sans-serif; font-size: 16px; letter-spacing: 0.5px; }
+  .lb-row.me .lb-name, .lb-row.me .lb-score { color: var(--accent-1); text-shadow: 0 0 8px var(--accent-glow); }
 
+  /* --- オーバーレイ (タイトル / リザルト) --- */
   #overlay {
     position: fixed; inset: 0; z-index: 20;
-    background: rgba(44, 62, 80, 0.7); backdrop-filter: blur(6px);
+    background: radial-gradient(circle at center, rgba(15, 23, 42, 0.7) 0%, rgba(15, 23, 42, 0.95) 100%);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     display: flex; align-items: center; justify-content: center; pointer-events: auto;
+    transition: opacity 0.4s ease;
   }
-  #overlay.hidden { display: none; }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  
   .panel {
-    background: #fff; padding: 40px; border-radius: 28px; text-align: center;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.3); width: 90%; max-width: 400px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 50px 40px; border-radius: 36px; text-align: center;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+    width: 90%; max-width: 420px;
+    color: var(--text-main);
+    transform: translateY(0) scale(1);
+    animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .title { font-size: 46px; font-weight: 900; color: var(--text); margin: 0 0 10px; letter-spacing: -2px;}
-  .title span { color: var(--accent); }
-  .desc { font-size: 15px; color: #7f8c8d; margin-bottom: 30px; font-weight: bold; line-height: 1.5;}
+  
+  @keyframes popIn {
+    0% { transform: translateY(20px) scale(0.9); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
 
-  .result-rank { font-size: 32px; font-weight: 900; color: var(--accent); margin: 20px 0 5px; }
-  .result-score { font-size: 20px; font-weight: 800; color: var(--text); margin-bottom: 30px; }
+  /* タイトル画面固有 */
+  .title-logo { 
+    font-family: 'Montserrat', sans-serif;
+    font-size: 56px; font-weight: 900; 
+    line-height: 1; margin: 0 0 20px; letter-spacing: -2px;
+    font-style: italic;
+    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
+  }
+  .title-logo .highlight { 
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 64px;
+    display: inline-block;
+  }
+  .desc { font-size: 16px; color: var(--text-sub); margin-bottom: 40px; font-weight: 700; line-height: 1.6; }
 
+  /* リザルト画面固有 */
+  .result-header {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 40px; font-weight: 900;
+    color: var(--text-main); margin-bottom: 30px; letter-spacing: -1px;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  .result-body {
+    background: rgba(0,0,0,0.2);
+    border-radius: 20px;
+    padding: 20px; margin-bottom: 40px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .result-rank-box { margin-bottom: 20px; }
+  .rank-label, .score-label {
+    display: block; font-size: 13px; font-weight: 800; color: var(--text-sub); letter-spacing: 2px; margin-bottom: 5px;
+  }
+  .rank-val {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 48px; font-weight: 900; color: var(--accent-1);
+    text-shadow: 0 0 15px var(--accent-glow);
+  }
+  .rank-total { font-size: 24px; color: var(--text-sub); text-shadow: none; }
+  .score-val {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 32px; font-weight: 900; color: var(--text-main);
+  }
+
+  /* --- ボタン --- */
   button {
-    background: var(--accent); color: #fff; border: none; border-radius: 100px;
-    font-size: 20px; font-weight: 900; padding: 18px 48px; cursor: pointer;
-    box-shadow: 0 6px 0 var(--accent-dark), 0 15px 20px rgba(0,210,211,0.3);
-    transition: all 0.1s; width: 100%;
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+    color: #fff; border: none; border-radius: 100px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 22px; font-weight: 900; letter-spacing: 2px;
+    padding: 20px 48px; cursor: pointer;
+    width: 100%;
+    box-shadow: 0 10px 20px var(--accent-glow), inset 0 -4px 0 rgba(0,0,0,0.2), inset 0 2px 0 rgba(255,255,255,0.4);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: hidden;
   }
-  button:active { transform: translateY(6px); box-shadow: 0 0 0 var(--accent-dark); }
+  button::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    transform: skewX(-20deg);
+  }
+  button:hover { 
+    transform: translateY(-3px) scale(1.02); 
+    box-shadow: 0 15px 25px var(--accent-glow), inset 0 -4px 0 rgba(0,0,0,0.2), inset 0 2px 0 rgba(255,255,255,0.4);
+  }
+  button:hover::after {
+    animation: shine 0.7s ease-out;
+  }
+  button:active { 
+    transform: translateY(4px) scale(0.98); 
+    box-shadow: 0 2px 5px var(--accent-glow), inset 0 -1px 0 rgba(0,0,0,0.2); 
+  }
+  
+  @keyframes shine {
+    0% { left: -100%; }
+    100% { left: 200%; }
+  }
 </style>
 </head>
 <body>
@@ -108,6 +254,7 @@
 </div>
 
 <script>
+// --- ゲームのロジック・描画部分は元のまま ---
 (function(){
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -120,26 +267,20 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // --- チューニング用コンフィグ ---
   const CONFIG = {
     WORLD_SIZE: 3500,
     NUM_BOTS: 3,
     OBJECT_GRID: 100,
     OBJECT_SKIP_CHANCE: 0.08,
-    OVERLAP_MARGIN: 0.9,      // 配置時に他オブジェクトとどこまで近づけて良いか(1で接触ギリギリ)
-
-    // 重力方式:サイズ比の閾値ではなく、「対象の何割が穴の上に来たか」で自然に落ちる
-    GRAVITY_RANGE_MULT: 1.5,        // 穴の半径の何倍まで重力が届くか
-    GRAVITY_STRENGTH: 130,          // 重力の強さ
-    FALL_THRESHOLD_BASE: 0.5,       // 対象の面積の何割が穴の上に来たら落ちるか(基準)
-    FALL_THRESHOLD_ROUND_BONUS: 0.14, // 丸い物ほど閾値が下がる=落ちやすい
-
-    GROWTH_MULT: 34,   // 食べた時の成長量の係数(旧25→34、最大サイズに届きやすく)
-
-    SPEED_MIN: 95,   // 小さい穴の速度
-    SPEED_MAX: 270,  // 最大に近い穴の速度
-
-    TILT_Y: 0.78,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
+    OVERLAP_MARGIN: 0.9,      
+    GRAVITY_RANGE_MULT: 1.5,        
+    GRAVITY_STRENGTH: 130,          
+    FALL_THRESHOLD_BASE: 0.5,       
+    FALL_THRESHOLD_ROUND_BONUS: 0.14, 
+    GROWTH_MULT: 34,   
+    SPEED_MIN: 95,   
+    SPEED_MAX: 270,  
+    TILT_Y: 0.78,     
   };
   const WORLD_SIZE = CONFIG.WORLD_SIZE;
   const INIT_R = 15;
@@ -153,8 +294,6 @@
     bots: ['#ff9f43', '#ee5253', '#5f27cd', '#10ac84', '#ff6b81'],
   };
 
-  // 街のオブジェクト定義。round: 1=丸くて綺麗に吸い込める / 0=角ばって引っかかりやすい
-  // サイズは細かい段階を用意し、穴がどの大きさでも「ギリギリ挑戦できる相手」が必ずいるようにする
   const TYPES = [
     { id:'person',        r:3,   h:8,   pts:1,   col:'#f1c40f', kind:'walker',    round:0.5 },
     { id:'dog',           r:4,   h:5,   pts:2,   col:'#c0785a', kind:'wanderer',  round:0.6 },
@@ -216,14 +355,12 @@
 
   function player() { return entities[0]; }
 
-  // 穴のサイズに応じた移動速度:小さいうちは遅く、育つほど速くなる
   function speedFor(r) {
     const t = Math.max(0, Math.min(1, (r - INIT_R) / (MAX_R - INIT_R)));
     const eased = Math.pow(t, 0.55);
     return CONFIG.SPEED_MIN + eased * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
   }
 
-  // 簡易空間ハッシュ:大きい建物(直径最大750)にも対応できるバケット幅
   const BUCKET = 400;
   let spatialBuckets = new Map();
   function bucketKeyOf(x, y) { return Math.floor(x / BUCKET) + ',' + Math.floor(y / BUCKET); }
@@ -302,7 +439,6 @@
     return obj;
   }
 
-  // 食べられた後の再配置。近くで重ならない場所を探し、駄目なら周囲を広げて再挑戦
   function spawnObject(x, y) {
     for (let attempt = 0; attempt < 10; attempt++) {
       const t = pickType();
@@ -316,7 +452,6 @@
         return;
       }
     }
-    // 最終手段:多少の重なりは許容して確実に配置する
     const t = pickType();
     const px = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
     const py = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
@@ -380,7 +515,6 @@
     o.y += (dy / d) * move;
   }
 
-  // 2つの円の重なり面積(対象がどれだけ穴の上に来ているかを面積で判定するため)
   function circleOverlapArea(d, r1, r2) {
     if (d >= r1 + r2) return 0;
     if (d <= Math.abs(r1 - r2)) { const m = Math.min(r1, r2); return Math.PI * m * m; }
@@ -514,7 +648,6 @@
 
     updateMovingObjects(dt);
 
-    // 当たり判定(重力方式)
     for (const e of entities) {
       if (e.respawnT > 0) continue;
 
@@ -523,8 +656,6 @@
         const round = o.type.round;
         const dist = Math.hypot(e.x - o.x, e.y - o.y);
 
-        // 重力:大きさに関わらず、近づいた物は穴に引き寄せられる。
-        // 大きい(重い)物ほど動きにくい。
         const gravityRange = e.r * CONFIG.GRAVITY_RANGE_MULT;
         if (dist < gravityRange) {
           const closeness = 1 - dist / gravityRange;
@@ -532,9 +663,6 @@
           pullObjectToward(o, e, dt, CONFIG.GRAVITY_STRENGTH * closeness * massFactor);
         }
 
-        // 落下判定:対象の面積のうち何割が穴の上に来ているかで自然に決まる
-        // (サイズ比のしきい値ではなく、丸い物ほど少ない割合で、角ばった物ほど
-        //  多くの割合が乗らないと落ちない)
         const overlapArea = circleOverlapArea(dist, e.r, o.type.r);
         const frac = overlapArea / (Math.PI * o.type.r * o.type.r);
         const threshold = CONFIG.FALL_THRESHOLD_BASE - (round - 0.5) * CONFIG.FALL_THRESHOLD_ROUND_BONUS;
@@ -546,7 +674,6 @@
           startFall(o, e, tight);
         }
 
-        // 地図の外に出ないように保険
         o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
         o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
       }
@@ -617,7 +744,6 @@
     return "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
   }
 
-  // 斜め見下ろし視点:高さのある物は常に同じ方向へ傾く(放射状ではなく一方向)
   const LEAN_X = 0.16;
   const LEAN_Y = -0.6;
   function getTopPos(sx, sy, h) {
@@ -695,7 +821,6 @@
     ctx.restore();
   }
 
-  // 自転車:実際に押し出された(立体の)ホイール2つ+フレーム+サドルで構成
   function drawBicycle(sx, sy, t, scale, fallT) {
     const sep = t.r * 0.85 * curZoom * scale;
     const wheelR = t.r * 0.42;
@@ -708,7 +833,6 @@
     drawCylinder(sx + t.r*0.25*curZoom*scale, frameY, t.r * 0.11, t.r * 0.85, shade(t.col, -0.25), scale, fallT);
   }
 
-  // 円柱状の建物:輪郭が丸いので、穴にすっと綺麗にはまる感触を出す
   function drawSilo(sx, sy, t, scale, fallT) {
     drawCylinder(sx, sy, t.r, t.h, t.col, scale, fallT);
     drawCylinder(sx, sy, t.r * 0.97, t.h * 0.5, shade(t.col, 0.18), scale, fallT);
@@ -718,7 +842,6 @@
     drawCylinder(sx, sy, t.r * 0.55, t.h * 1.12, shade(t.col, 0.2), scale, fallT);
   }
 
-  // 複雑な構造の建物:非対称な増築部分があり、穴に引っかかりやすい印象を出す
   function drawComplex(sx, sy, t, scale, fallT) {
     drawBox(sx, sy, t.r * 1.5, t.h, t.col, scale, fallT);
     const off = t.r * 0.85 * curZoom * scale;
@@ -744,7 +867,7 @@
   }
 
   function draw() {
-    ctx.fillStyle = '#1b1e24'; // マップ外(圏外)の色
+    ctx.fillStyle = '#1b1e24'; 
     ctx.fillRect(0, 0, W, H);
 
     function toSX(x) { return (x - camX) * curZoom + W/2; }
@@ -776,7 +899,6 @@
     }
     ctx.restore();
 
-    // マップの端をハザードテープ風の縞模様で明示する
     ctx.save();
     ctx.lineWidth = 16 * curZoom;
     ctx.setLineDash([20 * curZoom, 20 * curZoom]);
@@ -906,6 +1028,7 @@
     }
   }
 
+  // --- UI更新部分 (デザインに合わせてHTML構造をリッチに変更) ---
   function updateUI() {
     document.getElementById('scoreVal').textContent = player().score;
     document.getElementById('timeVal').textContent = timeLeft;
@@ -915,9 +1038,10 @@
 
     const sorted = [...entities].sort((a, b) => b.score - a.score);
     const lbHTML = sorted.map((e, idx) => `
-      <div class="lb-row ${e.isPlayer ? 'me' : ''}">
-        <div class="lb-dot" style="background:${e.color}"></div>
-        <div class="lb-name">${idx+1}. ${e.name}</div>
+      <div class="lb-row ${e.isPlayer ? 'me' : ''} rank-${idx+1}">
+        <div class="lb-rank">#${idx+1}</div>
+        <div class="lb-dot" style="background:${e.color}; box-shadow: 0 0 8px ${e.color};"></div>
+        <div class="lb-name">${e.name}</div>
         <div class="lb-score">${e.score}</div>
       </div>
     `).join('');
@@ -960,10 +1084,19 @@
     const rank = sorted.findIndex(e => e.isPlayer) + 1;
 
     const panel = document.getElementById('screen-content');
+    // リザルト画面のHTML構造をリッチに
     panel.innerHTML = `
-      <p class="title">TIME UP!</p>
-      <div class="result-rank">RANK: ${rank} / ${entities.length}</div>
-      <div class="result-score">FINAL SCORE: ${player().score}</div>
+      <div class="result-header">TIME UP!</div>
+      <div class="result-body">
+        <div class="result-rank-box">
+          <span class="rank-label">RANK</span>
+          <span class="rank-val">${rank}<span class="rank-total">/${entities.length}</span></span>
+        </div>
+        <div class="result-score-box">
+          <span class="score-label">FINAL SCORE</span>
+          <span class="score-val">${player().score}</span>
+        </div>
+      </div>
       <button id="retryBtn">PLAY AGAIN</button>
     `;
     document.getElementById('overlay').classList.remove('hidden');
@@ -972,8 +1105,9 @@
 
   function showTitle() {
     const panel = document.getElementById('screen-content');
+    // タイトル画面のHTML構造をリッチに
     panel.innerHTML = `
-      <p class="title">CITY <span>HOLE</span></p>
+      <div class="title-logo">CITY<br><span class="highlight">HOLE</span></div>
       <p class="desc">指でスライドして街を飲み込め。<br>大きなライバルからは逃げろ！</p>
       <button id="startBtn">START</button>
     `;
