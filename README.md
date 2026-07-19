@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>CITY HOLE - 街を飲み込め</title>
+<title>CITY HOLE 3D</title>
 <style>
   :root {
     --bg: #bfe3f2;
@@ -19,1216 +19,540 @@
     background: var(--bg); overflow: hidden;
     font-family: 'Helvetica Neue', Arial, sans-serif;
     touch-action: none; user-select: none;
+    position: fixed; inset: 0;
   }
-  canvas { display: block; width: 100%; height: 100%; }
+  #canvasWrap { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-  #ui-layer {
-    position: fixed; inset: 0; pointer-events: none; z-index: 10;
-  }
-
-  .hud {
-    position: absolute; top: 24px; left: 24px; right: 24px;
-    display: flex; justify-content: space-between; align-items: flex-start;
-  }
-  .hud-box {
-    background: var(--panel); border-radius: 20px;
-    padding: 12px 28px; text-align: center;
-    box-shadow: 0 6px 18px rgba(30,50,60,0.08);
-  }
-  .hud-label {
-    font-size: 11px; font-weight: 700; color: #a4b0b6; letter-spacing: 2px; margin-bottom: 2px;
-  }
-  .hud-value {
-    font-size: 26px; font-weight: 800; color: var(--text);
-  }
+  #ui-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .hud { position: absolute; top: 24px; left: 24px; right: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .hud-box { background: var(--panel); border-radius: 20px; padding: 12px 28px; text-align: center; box-shadow: 0 6px 18px rgba(30,50,60,0.08); }
+  .hud-label { font-size: 11px; font-weight: 700; color: #a4b0b6; letter-spacing: 2px; margin-bottom: 2px; }
+  .hud-value { font-size: 26px; font-weight: 800; color: var(--text); }
   #timer-box.danger .hud-value { color: #e0574a; }
 
-  .leaderboard {
-    position: absolute; top: 96px; right: 24px;
-    background: var(--panel); border-radius: 18px; padding: 14px 18px;
-    box-shadow: 0 6px 18px rgba(30,50,60,0.08);
-    min-width: 150px;
-  }
-  .lb-row {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 9px; font-size: 13px; font-weight: 600; color: #9aa5aa;
-  }
+  .leaderboard { position: absolute; top: 96px; right: 24px; background: var(--panel); border-radius: 18px; padding: 14px 18px; box-shadow: 0 6px 18px rgba(30,50,60,0.08); min-width: 150px; }
+  .lb-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; font-size: 13px; font-weight: 600; color: #9aa5aa; }
   .lb-row:last-child { margin-bottom: 0; }
   .lb-row.me { color: var(--accent); font-weight: 700; }
   .lb-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
   .lb-name { flex: 1; text-align: left; }
   .lb-score { font-family: monospace; font-size: 14px; }
 
-  #overlay {
-    position: fixed; inset: 0; z-index: 20;
-    background: rgba(40, 55, 65, 0.55); backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center; pointer-events: auto;
-  }
+  #overlay { position: fixed; inset: 0; z-index: 20; background: rgba(40, 55, 65, 0.55); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
   #overlay.hidden { display: none; }
-  .panel {
-    background: #fff; padding: 44px 40px; border-radius: 32px; text-align: center;
-    box-shadow: 0 24px 60px rgba(20,35,45,0.25); width: 90%; max-width: 400px;
-  }
-  .title { font-size: 44px; font-weight: 800; color: var(--text); margin: 0 0 10px; letter-spacing: -1.5px;}
+  .panel { background: #fff; padding: 44px 40px; border-radius: 32px; text-align: center; box-shadow: 0 24px 60px rgba(20,35,45,0.25); width: 90%; max-width: 400px; }
+  .title { font-size: 40px; font-weight: 800; color: var(--text); margin: 0 0 10px; letter-spacing: -1.5px; }
   .title span { color: var(--accent); }
-  .desc { font-size: 14px; color: #93a0a6; margin-bottom: 32px; font-weight: 600; line-height: 1.6;}
-
+  .desc { font-size: 14px; color: #93a0a6; margin-bottom: 32px; font-weight: 600; line-height: 1.6; }
   .result-rank { font-size: 30px; font-weight: 800; color: var(--accent); margin: 22px 0 6px; }
   .result-score { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 32px; }
-
-  button {
-    background: var(--accent); color: #fff; border: none; border-radius: 100px;
-    font-size: 18px; font-weight: 800; padding: 17px 48px; cursor: pointer;
-    box-shadow: 0 6px 0 var(--accent-dark), 0 14px 20px rgba(31,182,168,0.25);
-    transition: all 0.1s; width: 100%;
-  }
+  button { background: var(--accent); color: #fff; border: none; border-radius: 100px; font-size: 18px; font-weight: 800; padding: 17px 48px; cursor: pointer; box-shadow: 0 6px 0 var(--accent-dark), 0 14px 20px rgba(31,182,168,0.25); width: 100%; }
   button:active { transform: translateY(6px); box-shadow: 0 0 0 var(--accent-dark); }
+
+  #joystick { position: fixed; z-index: 15; pointer-events: none; width: 104px; height: 104px; margin: -52px 0 0 -52px; display: none; }
+  #joystick .base { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(31,182,168,0.35); background: rgba(31,182,168,0.06); }
+  #joystick .knob { position: absolute; width: 46px; height: 46px; border-radius: 50%; left: 29px; top: 29px; background: rgba(31,182,168,0.45); border: 2px solid rgba(31,182,168,0.85); }
+
+  #loading { position: fixed; inset: 0; z-index: 30; background: #bfe3f2; display: flex; align-items: center; justify-content: center; color: #26333d; font-weight: 700; }
 </style>
 </head>
 <body>
 
-<canvas id="game"></canvas>
+<div id="loading">読み込み中…</div>
+<div id="canvasWrap"></div>
 
 <div id="ui-layer">
   <div class="hud">
-    <div class="hud-box">
-      <div class="hud-label">SCORE</div>
-      <div class="hud-value" id="scoreVal">0</div>
-    </div>
-    <div class="hud-box" id="timer-box">
-      <div class="hud-label">TIME</div>
-      <div class="hud-value" id="timeVal">90</div>
-    </div>
+    <div class="hud-box"><div class="hud-label">Score</div><div class="hud-value" id="scoreVal">0</div></div>
+    <div class="hud-box" id="timer-box"><div class="hud-label">Time</div><div class="hud-value" id="timeVal">90</div></div>
   </div>
   <div class="leaderboard" id="lb"></div>
 </div>
+<div id="joystick"><div class="base"></div><div class="knob"></div></div>
 
 <div id="overlay">
-  <div class="panel" id="screen-content"></div>
+  <div class="panel" id="screen-content">
+    <p class="title">CITY HOLE <span>3D</span></p>
+    <p class="desc">最初のThree.js版です。ドラッグして移動し、街を飲み込め。</p>
+    <button id="startBtn">START</button>
+  </div>
 </div>
 
-<script>
-(function(){
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-  let W, H;
-  function resize() {
-    W = canvas.width = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resize);
-  resize();
+const CONFIG = {
+  WORLD_SIZE: 2400,
+  NUM_BOTS: 2,
+  OBJECT_COUNT: 140,
+  INIT_R: 15,
+  MAX_R: 320,
+  GAME_TIME: 120,
+  SPEED_MIN: 90,
+  SPEED_MAX: 260,
+  GROWTH_MULT: 30,
+};
 
-  // --- チューニング用コンフィグ ---
-  const CONFIG = {
-    WORLD_SIZE: 3500,
-    NUM_BOTS: 3,
-    OBJECT_GRID: 100,
-    OBJECT_SKIP_CHANCE: 0.08,
-    OVERLAP_MARGIN: 0.9,      // 配置時に他オブジェクトとどこまで近づけて良いか(1で接触ギリギリ)
+// ---------------- three.js 基本セットアップ ----------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfe3f2);
+scene.fog = new THREE.Fog(0xbfe3f2, 700, 2200);
 
-    // 重力方式:サイズ比の閾値ではなく、「対象の何割が穴の上に来たか」で自然に落ちる
-    GROWTH_MULT: 34,   // 食べた時の成長量の係数
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 4000);
 
-    SPEED_MIN: 95,   // 小さい穴の速度
-    SPEED_MAX: 270,  // 最大に近い穴の速度
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('canvasWrap').appendChild(renderer.domElement);
 
-    TILT_Y: 0.78,     // 縦方向の圧縮率。1で真上、小さいほど斜めから見下ろす感じに近づく
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x6b8e4e, 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4d6, 1.15);
+sun.position.set(-500, 700, -350);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
+sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
+sun.shadow.camera.far = 2000;
+scene.add(sun);
+scene.add(sun.target);
+
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x7fae52 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// マップの端をハザードストライプで示す
+const edgeMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+const edgeGeo = new THREE.BoxGeometry(CONFIG.WORLD_SIZE + 20, 8, 6);
+const half = CONFIG.WORLD_SIZE / 2;
+[[0, -half - 3], [0, half + 3]].forEach(([x, z]) => {
+  const e1 = new THREE.Mesh(edgeGeo, edgeMat); e1.position.set(x, 4, z); scene.add(e1);
+});
+const edgeGeoV = new THREE.BoxGeometry(6, 8, CONFIG.WORLD_SIZE + 20);
+[[-half - 3, 0], [half + 3, 0]].forEach(([x, z]) => {
+  const e1 = new THREE.Mesh(edgeGeoV, edgeMat); e1.position.set(x, 4, z); scene.add(e1);
+});
+
+// ---------------- 穴(プレイヤー / CPU) ----------------
+const holeCircleGeo = new THREE.CircleGeometry(1, 40);
+const BOT_COLORS = [0xff9f43, 0xee5253, 0x5f27cd];
+const BOT_NAMES = ['CPU 1', 'CPU 2', 'CPU 3'];
+
+function makeEntity(isPlayer, idx) {
+  const color = isPlayer ? 0x00d2d3 : BOT_COLORS[idx % BOT_COLORS.length];
+  const mat = new THREE.MeshBasicMaterial({ color: 0x030303 });
+  const mesh = new THREE.Mesh(holeCircleGeo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.08;
+  scene.add(mesh);
+  const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.98, 1.05, 40), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.09;
+  scene.add(ring);
+  return {
+    isPlayer, name: isPlayer ? 'YOU' : BOT_NAMES[idx % BOT_NAMES.length], colorHex: color,
+    mesh, ring, position: new THREE.Vector3(0, 0, 0), r: CONFIG.INIT_R,
+    vx: 0, vz: 0, score: 0, wanderAngle: Math.random() * Math.PI * 2, wanderT: 0, target: null
   };
-  const WORLD_SIZE = CONFIG.WORLD_SIZE;
-  const INIT_R = 15;
-  const MAX_R = 400;
-  const GAME_TIME = 130;
+}
 
-  const COLORS = {
-    bg: '#7fae52',
-    bgDark: '#6f9c46',
-    bgLight: '#8fc25e',
-    road: '#c9c6bc',
-    roadLine: '#f4efe0',
-    curb: '#a6a396',
-    player: '#00d2d3',
-    bots: ['#ff9f43', '#ee5253', '#5f27cd', '#10ac84', '#ff6b81'],
-  };
+let entities = [];
+function player() { return entities[0]; }
 
-  // 太陽の方向(常に左上から)。全オブジェクト・地面・穴の陰影をこの一方向で統一する
-  const LIGHT = (function(){ const x=-0.55, y=-0.7, len=Math.hypot(x,y); return { x:x/len, y:y/len }; })();
+function speedFor(r) {
+  const t = Math.max(0, Math.min(1, (r - CONFIG.INIT_R) / (CONFIG.MAX_R - CONFIG.INIT_R)));
+  return CONFIG.SPEED_MIN + Math.pow(t, 0.55) * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
+}
+function updateEntityMesh(e) {
+  e.mesh.position.set(e.position.x, 0.08, e.position.z);
+  e.mesh.scale.set(e.r, e.r, 1);
+  e.ring.position.set(e.position.x, 0.09, e.position.z);
+  e.ring.scale.set(e.r, e.r, 1);
+}
 
-  // 街のオブジェクト定義。round: 1=丸くて綺麗に吸い込める / 0=角ばって引っかかりやすい
-  // サイズは細かい段階を用意し、穴がどの大きさでも「ギリギリ挑戦できる相手」が必ずいるようにする
-  const TYPES = [
-    { id:'person',        r:3,   h:8,   pts:1,   col:'#f1c40f', kind:'walker',    round:0.5 },
-    { id:'dog',           r:4,   h:5,   pts:2,   col:'#c0785a', kind:'wanderer',  round:0.6 },
-    { id:'balloon',       r:5.5, h:16,  pts:4,   col:'#ff6b9d', kind:'floater',   round:1.0 },
-    { id:'cone',          r:7.5, h:6,   pts:3,   col:'#e67e22', kind:'static',    round:0.7 },
-    { id:'hydrant',       r:10,  h:9,   pts:6,   col:'#e74c3c', kind:'static',    round:0.7 },
-    { id:'bicycle',       r:14,  h:11,  pts:9,   col:'#2c3e50', kind:'static',    round:0.5 },
-    { id:'bench',         r:19,  h:6,   pts:13,  col:'#9b59b6', kind:'static',    round:0.2 },
-    { id:'lamp',          r:25,  h:22,  pts:18,  col:'#f9ca24', kind:'static',    round:0.7 },
-    { id:'tree',          r:34,  h:30,  pts:24,  col:'#2ecc71', kind:'static',    round:0.85},
-    { id:'car',           r:46,  h:14,  pts:32,  col:'#3498db', kind:'driver',    round:0.4 },
-    { id:'silo',          r:62,  h:60,  pts:45,  col:'#8395a7', kind:'static',    round:1.0 },
-    { id:'house',         r:84,  h:40,  pts:65,  col:'#e74c3c', kind:'static',    round:0.3 },
-    { id:'complex',       r:113, h:70,  pts:95,  col:'#57606f', kind:'static',    round:0.25},
-    { id:'towerRound',    r:153, h:150, pts:145, col:'#4b6584', kind:'static',    round:0.95},
-    { id:'skyscraper',    r:206, h:210, pts:210, col:'#34495e', kind:'static',    round:0.3 },
-    { id:'complexTower',  r:278, h:260, pts:320, col:'#2f3542', kind:'static',    round:0.25},
-    { id:'landmark',      r:375, h:320, pts:550, col:'#c0975a', kind:'static',    round:0.55},
-  ];
+// ---------------- 建物などの型(footprintは半径ベースの矩形/円で近似) ----------------
+function shadeHex(hex, amt) {
+  const r = (hex >> 16) & 0xff, g = (hex >> 8) & 0xff, b = hex & 0xff;
+  const c = v => Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+  return (c(r) << 16) | (c(g) << 8) | c(b);
+}
+function stdMat(color) { return new THREE.MeshStandardMaterial({ color }); }
 
-  let objects = [];
-  let entities = [];
-  let particles = [];
+const TYPES = [
+  { id: 'cone', hw: 6, hd: 6, round: false, pts: 3, build: buildCone },
+  { id: 'bench', hw: 14, hd: 7, round: false, pts: 8, build: buildBench },
+  { id: 'tree', hw: 18, hd: 18, round: true, pts: 16, build: buildTree },
+  { id: 'car', hw: 22, hd: 12, round: false, pts: 24, build: buildCar },
+  { id: 'silo', hw: 34, hd: 34, round: true, pts: 40, build: buildSilo },
+  { id: 'house', hw: 46, hd: 34, round: false, pts: 70, build: buildHouse },
+];
 
-  let running = false;
-  let timeLeft = GAME_TIME;
-  let timerAccum = 0;
-  let lastTime = 0;
+function buildCone(t) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.ConeGeometry(t.hw, 22, 16), stdMat(0xff8a3d));
+  m.position.y = 11; m.castShadow = true; m.receiveShadow = true;
+  g.add(m);
+  return g;
+}
+function buildBench(t) {
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, 4, t.hd*2), stdMat(0x9b59b6));
+  seat.position.y = 10; seat.castShadow = true; seat.receiveShadow = true;
+  g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, 14, 3), stdMat(0x8a4aa0));
+  back.position.set(0, 18, -t.hd*0.85); back.castShadow = true;
+  g.add(back);
+  return g;
+}
+function buildTree(t) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 20, 8), stdMat(0x7a5636));
+  trunk.position.y = 10; trunk.castShadow = true;
+  g.add(trunk);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(t.hw*0.85, 10, 8), stdMat(0x3fae5c));
+  canopy.position.y = 32; canopy.castShadow = true;
+  g.add(canopy);
+  return g;
+}
+function buildCar(t) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, 12, t.hd*2), stdMat(0x3498db));
+  body.position.y = 8; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(t.hw*1.1, 10, t.hd*1.3), stdMat(0xd8ecf5));
+  cabin.position.y = 18; cabin.castShadow = true;
+  g.add(cabin);
+  return g;
+}
+function buildSilo(t) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(t.hw, t.hw, 46, 20), stdMat(0x8395a7));
+  body.position.y = 23; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(t.hw*1.02, 12, 20), stdMat(shadeHex(0x8395a7, 0.15)));
+  cap.position.y = 46 + 6; cap.castShadow = true;
+  g.add(cap);
+  return g;
+}
+function buildHouse(t) {
+  const g = new THREE.Group();
+  const wallH = 34;
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(t.hw*2, wallH, t.hd*2), stdMat(0xc9814c));
+  wall.position.y = wallH/2; wall.castShadow = true; wall.receiveShadow = true;
+  g.add(wall);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(t.hw*1.3, wallH*0.6, 4), stdMat(0x8a4a3a));
+  roof.rotation.y = Math.PI/4; roof.position.y = wallH + wallH*0.3; roof.castShadow = true;
+  g.add(roof);
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x9fd0ff, emissive: 0x224466, emissiveIntensity: 0.25 });
+  const w1 = new THREE.Mesh(new THREE.BoxGeometry(t.hw*0.55, wallH*0.32, 2), winMat);
+  w1.position.set(-t.hw*0.5, wallH*0.58, t.hd + 1);
+  g.add(w1);
+  const w2 = w1.clone(); w2.position.x = t.hw*0.5; g.add(w2);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(t.hw*0.42, wallH*0.55, 2), stdMat(0x5c3a26));
+  door.position.set(0, wallH*0.28, t.hd + 1);
+  g.add(door);
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(t.hw*0.3, wallH*0.55, t.hw*0.3), stdMat(0x7a6a5a));
+  chimney.position.set(t.hw*0.6, wallH + wallH*0.28, -t.hd*0.3);
+  chimney.castShadow = true;
+  g.add(chimney);
+  return g;
+}
 
-  let camX = WORLD_SIZE / 2;
-  let camY = WORLD_SIZE / 2;
-  let curZoom = 2.3;
+// ---------------- オブジェクト管理 ----------------
+let objects = [];
+function pickType() { return TYPES[Math.floor(Math.random() * TYPES.length)]; }
 
-  let isPointerDown = false;
-  let pointerX = W/2, pointerY = H/2;
-  let joyCenter = { x: W/2, y: H/2 };
-
-  canvas.addEventListener('pointerdown', e => {
-    isPointerDown = true;
-    pointerX = e.clientX; pointerY = e.clientY;
-    joyCenter = { x: e.clientX, y: e.clientY };
+function spawnObjectAt(x, z) {
+  const t = pickType();
+  const model = t.build(t);
+  const pivot = new THREE.Group();
+  model.position.set(x, 0, z);
+  pivot.add(model);
+  scene.add(pivot);
+  objects.push({
+    type: t, x, z, model, pivot,
+    falling: false, fallT: 0, eater: null, topple: false, fallAxis: null
   });
-  canvas.addEventListener('pointermove', e => {
-    if (isPointerDown) {
-      pointerX = e.clientX; pointerY = e.clientY;
-      const dx = pointerX - joyCenter.x;
-      const dy = pointerY - joyCenter.y;
-      const dist = Math.hypot(dx, dy);
-      const maxJoy = 60;
-      if (dist > maxJoy) {
-        joyCenter.x += (dist - maxJoy) * (dx / dist);
-        joyCenter.y += (dist - maxJoy) * (dy / dist);
-      }
+}
+function initObjects() {
+  for (const o of objects) { scene.remove(o.pivot); }
+  objects = [];
+  for (let i = 0; i < CONFIG.OBJECT_COUNT; i++) {
+    const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+    const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+    spawnObjectAt(x, z);
+  }
+}
+function respawnObject(old) {
+  scene.remove(old.pivot);
+  const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+  const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+  spawnObjectAt(x, z);
+}
+
+function addArea(e, area) {
+  const cur = Math.PI * e.r * e.r;
+  e.r = Math.min(CONFIG.MAX_R, Math.sqrt((cur + area) / Math.PI));
+}
+
+function triggerFall(o, e) {
+  const halfW = o.type.hw, halfD = o.type.hd;
+  let pivotPos;
+  if (o.type.round) {
+    pivotPos = new THREE.Vector3(o.x, 0, o.z);
+    o.topple = false;
+  } else {
+    const corners = [[-halfW,-halfD],[halfW,-halfD],[halfW,halfD],[-halfW,halfD]];
+    const outside = [];
+    for (const [lx, lz] of corners) {
+      const wx = o.x + lx, wz = o.z + lz;
+      const d = Math.hypot(wx - e.position.x, wz - e.position.z);
+      if (d >= e.r) outside.push({ x: wx, z: wz });
     }
-  });
-  canvas.addEventListener('pointerup', () => isPointerDown = false);
-  canvas.addEventListener('pointercancel', () => isPointerDown = false);
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-  function player() { return entities[0]; }
-
-  // 穴のサイズに応じた移動速度:小さいうちは遅く、育つほど速くなる
-  function speedFor(r) {
-    const t = Math.max(0, Math.min(1, (r - INIT_R) / (MAX_R - INIT_R)));
-    const eased = Math.pow(t, 0.55);
-    return CONFIG.SPEED_MIN + eased * (CONFIG.SPEED_MAX - CONFIG.SPEED_MIN);
-  }
-
-  // 簡易空間ハッシュ:大きい建物(直径最大750)にも対応できるバケット幅
-  const BUCKET = 400;
-  let spatialBuckets = new Map();
-  function bucketKeyOf(x, y) { return Math.floor(x / BUCKET) + ',' + Math.floor(y / BUCKET); }
-  function addToBuckets(obj) {
-    const key = bucketKeyOf(obj.x, obj.y);
-    if (!spatialBuckets.has(key)) spatialBuckets.set(key, new Set());
-    spatialBuckets.get(key).add(obj);
-    obj._bucketKey = key;
-  }
-  function removeFromBuckets(obj) {
-    const set = spatialBuckets.get(obj._bucketKey);
-    if (set) set.delete(obj);
-  }
-  function overlapsExisting(type, x, y) {
-    const bx = Math.floor(x / BUCKET), by = Math.floor(y / BUCKET);
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const set = spatialBuckets.get((bx+dx) + ',' + (by+dy));
-        if (!set) continue;
-        for (const other of set) {
-          const d = Math.hypot(other.x - x, other.y - y);
-          if (d < (other.type.r + type.r) * CONFIG.OVERLAP_MARGIN) return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  function pickType() {
-    const roll = Math.random();
-    let type;
-    if (roll < 0.15) type = 'person';
-    else if (roll < 0.27) type = 'dog';
-    else if (roll < 0.37) type = 'balloon';
-    else if (roll < 0.46) type = 'cone';
-    else if (roll < 0.54) type = 'hydrant';
-    else if (roll < 0.61) type = 'bicycle';
-    else if (roll < 0.68) type = 'bench';
-    else if (roll < 0.75) type = 'lamp';
-    else if (roll < 0.85) type = 'tree';
-    else if (roll < 0.92) type = 'car';
-    else if (roll < 0.955) type = 'silo';
-    else if (roll < 0.975) type = 'house';
-    else if (roll < 0.985) type = 'complex';
-    else if (roll < 0.991) type = 'towerRound';
-    else if (roll < 0.996) type = 'skyscraper';
-    else if (roll < 0.9985) type = 'complexTower';
-    else type = 'landmark';
-    return TYPES.find(tt => tt.id === type);
-  }
-
-  function makeObject(t, x, y) {
-    const obj = {
-      type: t, x, y,
-      falling: false, fallT: 0, eater: null, startX: 0, startY: 0,
-      seed: Math.random() * 1000, strain: 0, _wasStrained: false,
-      leanAngle: 0, leanPivotX: x, leanPivotY: y, leanSign: 1
-    };
-    if (t.kind === 'walker') {
-      obj.patrolCenterX = x; obj.patrolCenterY = y;
-      obj.patrolR = 15 + Math.random() * 25;
-      obj.phase = Math.random() * Math.PI * 2;
-      obj.vx = 0; obj.vy = 0;
-    } else if (t.kind === 'wanderer') {
-      obj.vx = 0; obj.vy = 0;
-      obj.wanderAngle = Math.random() * Math.PI * 2;
-      obj.wanderT = Math.random() * 2;
-    } else if (t.kind === 'floater') {
-      obj.baseX = x; obj.baseY = y;
-      obj.bobPhase = Math.random() * Math.PI * 2;
-    } else if (t.kind === 'driver') {
-      const horiz = Math.random() < 0.5;
-      const spd = 35 + Math.random() * 25;
-      obj.vx = horiz ? (Math.random() < 0.5 ? spd : -spd) : 0;
-      obj.vy = horiz ? 0 : (Math.random() < 0.5 ? spd : -spd);
-    }
-    return obj;
-  }
-
-  // 食べられた後の再配置。近くで重ならない場所を探し、駄目なら周囲を広げて再挑戦
-  function spawnObject(x, y) {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const t = pickType();
-      const spread = 150 + attempt * 60;
-      const px = Math.max(t.r + 5, Math.min(WORLD_SIZE - t.r - 5, x + (Math.random()-0.5) * spread));
-      const py = Math.max(t.r + 5, Math.min(WORLD_SIZE - t.r - 5, y + (Math.random()-0.5) * spread));
-      if (!overlapsExisting(t, px, py)) {
-        const obj = makeObject(t, px, py);
-        objects.push(obj);
-        addToBuckets(obj);
-        return;
-      }
-    }
-    // 最終手段:多少の重なりは許容して確実に配置する
-    const t = pickType();
-    const px = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
-    const py = Math.max(t.r+5, Math.min(WORLD_SIZE-t.r-5, Math.random()*WORLD_SIZE));
-    const obj = makeObject(t, px, py);
-    objects.push(obj);
-    addToBuckets(obj);
-  }
-
-  function initWorld() {
-    objects = [];
-    spatialBuckets = new Map();
-    const GRID = CONFIG.OBJECT_GRID;
-    for (let x = GRID/2; x < WORLD_SIZE; x += GRID) {
-      for (let y = GRID/2; y < WORLD_SIZE; y += GRID) {
-        if (Math.random() < CONFIG.OBJECT_SKIP_CHANCE) continue;
-        for (let attempt = 0; attempt < 6; attempt++) {
-          const t = pickType();
-          const rx = x + (Math.random() - 0.5) * GRID * 0.9;
-          const ry = y + (Math.random() - 0.5) * GRID * 0.9;
-          if (rx - t.r < 5 || rx + t.r > WORLD_SIZE - 5 || ry - t.r < 5 || ry + t.r > WORLD_SIZE - 5) continue;
-          if (overlapsExisting(t, rx, ry)) continue;
-          const obj = makeObject(t, rx, ry);
-          objects.push(obj);
-          addToBuckets(obj);
-          break;
-        }
-      }
+    if (outside.length > 0) {
+      let px = 0, pz = 0;
+      for (const c of outside) { px += c.x; pz += c.z; }
+      px /= outside.length; pz /= outside.length;
+      pivotPos = new THREE.Vector3(px, 0, pz);
+      o.topple = true;
+    } else {
+      pivotPos = new THREE.Vector3(o.x, 0, o.z);
+      o.topple = false;
     }
   }
 
-  function initEntities() {
-    entities = [];
-    entities.push({
-      isPlayer: true, name: 'YOU', color: COLORS.player,
-      x: WORLD_SIZE/2, y: WORLD_SIZE/2, r: INIT_R,
-      vx: 0, vy: 0, score: 0, respawnT: 0,
-      rim: makeRim(), rubble: makeRubble()
-    });
-    for (let i = 0; i < CONFIG.NUM_BOTS; i++) {
-      entities.push({
-        isPlayer: false, name: 'CPU ' + (i+1), color: COLORS.bots[i % COLORS.bots.length],
-        x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, r: INIT_R,
-        vx: 0, vy: 0, score: 0, respawnT: 0, wanderAngle: Math.random() * Math.PI * 2,
-        rim: makeRim(), rubble: makeRubble()
+  o.pivot.position.copy(pivotPos);
+  o.model.position.set(o.x - pivotPos.x, 0, o.z - pivotPos.z);
+
+  if (o.topple) {
+    const dirX = e.position.x - pivotPos.x, dirZ = e.position.z - pivotPos.z;
+    const dlen = Math.hypot(dirX, dirZ) || 1;
+    o.fallAxis = new THREE.Vector3(-dirZ / dlen, 0, dirX / dlen);
+  }
+
+  o.falling = true; o.fallT = 0; o.eater = e;
+}
+
+function updateFalling(dt) {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    if (!o.falling) continue;
+    o.fallT += dt / 0.9;
+    const t = Math.min(o.fallT, 1);
+    if (o.topple) {
+      o.pivot.quaternion.setFromAxisAngle(o.fallAxis, t * Math.PI * 0.58);
+    } else {
+      o.model.scale.setScalar(1 - t);
+    }
+    o.pivot.position.y = -t * 60;
+    const fadeStart = 0.6;
+    if (t > fadeStart) {
+      const alpha = 1 - (t - fadeStart) / (1 - fadeStart);
+      o.model.traverse(m => {
+        if (m.material) { m.material.transparent = true; m.material.opacity = Math.max(0, alpha); }
       });
     }
-    camX = entities[0].x;
-    camY = entities[0].y;
-    curZoom = 2.3;
-  }
-  function makeRim() {
-    const pts = 14, arr = [];
-    for (let i = 0; i < pts; i++) arr.push(0.88 + Math.random() * 0.2);
-    return arr;
-  }
-  function makeRubble() {
-    const arr = [];
-    for (let i = 0; i < 6; i++) arr.push({ angle: Math.random()*Math.PI*2, distF: 0.95+Math.random()*0.12, size: 0.06+Math.random()*0.05 });
-    return arr;
-  }
-
-  function addArea(e, area) {
-    const currentArea = Math.PI * e.r * e.r;
-    const newArea = currentArea + area;
-    e.r = Math.min(MAX_R, Math.sqrt(newArea / Math.PI));
-  }
-
-  function pullObjectToward(o, e, dt, speed) {
-    const dx = e.x - o.x, dy = e.y - o.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const move = Math.min(d, speed * dt);
-    o.x += (dx / d) * move;
-    o.y += (dy / d) * move;
-  }
-
-  // 2つの円の重なり面積(対象がどれだけ穴の上に来ているかを面積で判定するため)
-  function circleOverlapArea(d, r1, r2) {
-    if (d >= r1 + r2) return 0;
-    if (d <= Math.abs(r1 - r2)) { const m = Math.min(r1, r2); return Math.PI * m * m; }
-    if (d < 1e-6) d = 1e-6;
-    const r1sq = r1*r1, r2sq = r2*r2;
-    let a1 = (d*d + r1sq - r2sq) / (2*d*r1);
-    let a2 = (d*d + r2sq - r1sq) / (2*d*r2);
-    a1 = Math.max(-1, Math.min(1, a1));
-    a2 = Math.max(-1, Math.min(1, a2));
-    const alpha = Math.acos(a1), beta = Math.acos(a2);
-    return r1sq*(alpha - Math.sin(2*alpha)/2) + r2sq*(beta - Math.sin(2*beta)/2);
-  }
-
-  function startFall(o, e, tight) {
-    o.falling = true;
-    o.eater = e;
-    o.startX = o.x; o.startY = o.y;
-    o.fallT = 0;
-    o.tight = tight;
-  }
-
-  function updateMovingObjects(dt) {
-    for (const o of objects) {
-      if (o.falling) continue;
-      const k = o.type.kind;
-      if (k === 'walker') {
-        o.phase += dt * 1.1;
-        o.vx = -Math.sin(o.phase) * o.patrolR * 1.1;
-        o.vy = Math.cos(o.phase * 0.7) * o.patrolR * 0.7;
-        o.x = o.patrolCenterX + Math.cos(o.phase) * o.patrolR;
-        o.y = o.patrolCenterY + Math.sin(o.phase * 0.7) * o.patrolR * 0.6;
-      } else if (k === 'wanderer') {
-        o.wanderT -= dt;
-        if (o.wanderT <= 0) {
-          o.wanderAngle = Math.random() * Math.PI * 2;
-          o.wanderT = 1.2 + Math.random() * 1.8;
-        }
-        o.vx = Math.cos(o.wanderAngle) * 45;
-        o.vy = Math.sin(o.wanderAngle) * 45;
-        o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x + o.vx * dt));
-        o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y + o.vy * dt));
-      } else if (k === 'floater') {
-        o.bobPhase += dt * 1.4;
-        o.y = o.baseY + Math.sin(o.bobPhase) * 8;
-        o.x = o.baseX + Math.cos(o.bobPhase * 0.5) * 5;
-      } else if (k === 'driver') {
-        o.x += o.vx * dt;
-        o.y += o.vy * dt;
-        if (o.x < o.type.r || o.x > WORLD_SIZE - o.type.r) o.vx *= -1;
-        if (o.y < o.type.r || o.y > WORLD_SIZE - o.type.r) o.vy *= -1;
-        o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
-        o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
-      }
+    if (o.fallT >= 1) {
+      o.eater.score += o.type.pts;
+      addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT);
+      if (o.eater.isPlayer) updateScoreUI();
+      respawnObject(o);
+      objects.splice(i, 1);
     }
   }
+}
 
-  function update(dt) {
-    const p = player();
+// ---------------- 入力(ジョイスティック) ----------------
+let joy = { active: false, ox: 0, oy: 0, dx: 0, dy: 0, mag: 0 };
+const JOY_MAX = 46;
+const joystickEl = document.getElementById('joystick');
+function joyStart(x, y) {
+  joy.active = true; joy.ox = x; joy.oy = y; joy.dx = 0; joy.dy = 0; joy.mag = 0;
+  joystickEl.style.left = x + 'px'; joystickEl.style.top = y + 'px';
+  joystickEl.style.display = 'block';
+  joystickEl.querySelector('.knob').style.left = '29px';
+  joystickEl.querySelector('.knob').style.top = '29px';
+}
+function joyMove(x, y) {
+  if (!joy.active) return;
+  const dx = x - joy.ox, dy = y - joy.oy;
+  const d = Math.hypot(dx, dy);
+  const clamped = Math.min(d, JOY_MAX);
+  const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : 0;
+  joy.dx = nx; joy.dy = ny; joy.mag = clamped / JOY_MAX;
+  joystickEl.querySelector('.knob').style.left = (29 + nx * clamped) + 'px';
+  joystickEl.querySelector('.knob').style.top = (29 + ny * clamped) + 'px';
+}
+function joyEnd() { joy.active = false; joy.mag = 0; joystickEl.style.display = 'none'; }
 
-    if (p.respawnT > 0) {
-      p.respawnT -= dt;
-      if (p.respawnT <= 0) {
-        p.x = Math.random() * WORLD_SIZE; p.y = Math.random() * WORLD_SIZE;
-        p.r = INIT_R; p.score = Math.floor(p.score / 2);
-      }
-    } else {
-      const speed = speedFor(p.r);
-      if (isPointerDown) {
-        const dx = pointerX - joyCenter.x;
-        const dy = pointerY - joyCenter.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 5) {
-          p.vx = (dx / dist) * speed;
-          p.vy = (dy / dist) * speed;
-        }
-      } else {
-        p.vx *= 0.85; p.vy *= 0.85;
-      }
-      p.x = Math.max(p.r, Math.min(WORLD_SIZE - p.r, p.x + p.vx * dt));
-      p.y = Math.max(p.r, Math.min(WORLD_SIZE - p.r, p.y + p.vy * dt));
-    }
+renderer.domElement.addEventListener('pointerdown', e => { e.preventDefault(); joyStart(e.clientX, e.clientY); });
+renderer.domElement.addEventListener('pointermove', e => { if (joy.active) { e.preventDefault(); joyMove(e.clientX, e.clientY); } });
+renderer.domElement.addEventListener('pointerup', e => { e.preventDefault(); joyEnd(); });
+renderer.domElement.addEventListener('pointercancel', () => joyEnd());
+renderer.domElement.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+renderer.domElement.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
-    for (let i = 1; i < entities.length; i++) {
-      const bot = entities[i];
-      if (bot.respawnT > 0) {
-        bot.respawnT -= dt;
-        if (bot.respawnT <= 0) {
-          bot.x = Math.random() * WORLD_SIZE; bot.y = Math.random() * WORLD_SIZE;
-          bot.r = INIT_R; bot.score = Math.floor(bot.score / 2);
-        }
-        continue;
-      }
+// ---------------- ゲーム進行 ----------------
+let running = false, timeLeft = CONFIG.GAME_TIME, timerAccum = 0, score = 0;
+const scoreVal = document.getElementById('scoreVal');
+const timeVal = document.getElementById('timeVal');
+const timerBox = document.getElementById('timer-box');
+const lbEl = document.getElementById('lb');
 
-      const speed = speedFor(bot.r);
-      let target = null;
-      let flee = false;
+function updateScoreUI() { score = player().score; scoreVal.textContent = score; }
 
-      for (const e of entities) {
-        if (e === bot || e.respawnT > 0) continue;
-        if (e.r > bot.r * 1.25) {
-          const d = Math.hypot(e.x - bot.x, e.y - bot.y);
-          if (d < bot.r * 4 + e.r) {
-            target = { x: bot.x - (e.x - bot.x), y: bot.y - (e.y - bot.y) };
-            flee = true; break;
-          }
-        }
-      }
+function resetGame() {
+  entities.forEach(e => { scene.remove(e.mesh); scene.remove(e.ring); });
+  entities = [];
+  entities.push(makeEntity(true, 0));
+  for (let i = 0; i < CONFIG.NUM_BOTS; i++) entities.push(makeEntity(false, i));
+  entities.forEach(e => { e.position.set((Math.random()-0.5)*400, 0, (Math.random()-0.5)*400); e.r = CONFIG.INIT_R; e.score = 0; updateEntityMesh(e); });
+  player().position.set(0,0,0);
+  initObjects();
+  score = 0; timeLeft = CONFIG.GAME_TIME; timerAccum = 0; running = true;
+  scoreVal.textContent = '0'; timeVal.textContent = String(CONFIG.GAME_TIME);
+  timerBox.classList.remove('danger');
+  document.getElementById('overlay').classList.add('hidden');
+}
 
-      if (!flee) {
-        let minDist = Infinity;
-        for (const o of objects) {
-          if (o.falling || bot.r < o.type.r * 0.7) continue;
-          const d = Math.hypot(o.x - bot.x, o.y - bot.y);
-          if (d < minDist && d < 400) { minDist = d; target = o; }
-        }
-      }
-
-      if (target) {
-        const dx = target.x - bot.x; const dy = target.y - bot.y;
-        const d = Math.hypot(dx, dy) || 1;
-        bot.vx = (dx / d) * speed; bot.vy = (dy / d) * speed;
-      } else {
-        bot.wanderAngle += (Math.random() - 0.5) * 1.5 * dt;
-        bot.vx = Math.cos(bot.wanderAngle) * speed * 0.7;
-        bot.vy = Math.sin(bot.wanderAngle) * speed * 0.7;
-      }
-
-      bot.x = Math.max(bot.r, Math.min(WORLD_SIZE - bot.r, bot.x + bot.vx * dt));
-      bot.y = Math.max(bot.r, Math.min(WORLD_SIZE - bot.r, bot.y + bot.vy * dt));
-    }
-
-    updateMovingObjects(dt);
-
-    // 当たり判定(重力方式)
-    for (const e of entities) {
-      if (e.respawnT > 0) continue;
-
+function botAI(bot, dt) {
+  let target = null, flee = false, bestD = Infinity;
+  for (const other of entities) {
+    if (other === bot) continue;
+    const d = Math.hypot(other.position.x - bot.position.x, other.position.z - bot.position.z);
+    if (other.r > bot.r * 1.2 && d < 260) { target = { x: bot.position.x - (other.position.x-bot.position.x), z: bot.position.z - (other.position.z-bot.position.z) }; flee = true; break; }
+  }
+  if (!flee) {
+    if (!bot.target || bot.target.falling) {
+      let best = null, bd = Infinity;
       for (const o of objects) {
         if (o.falling) continue;
-        const round = o.type.round;
-        const dist = Math.hypot(e.x - o.x, e.y - o.y);
-        const isRoundFoot = round >= 0.7;
-
-        if (isRoundFoot) {
-          // 丸い設置面:引っかからず、中心が穴に十分乗ったら素直に落ちる
-          if (dist < e.r * 0.72) {
-            startFall(o, e, false);
-            o.topple = false;
-          }
-        } else {
-          // 角ばった設置面:底面の4つの角それぞれで判定する。
-          // どれか1つでも穴に入った瞬間、その場で確定で倒れ始める。
-          // 倒れる軸(ピボット)は、まだ地面に残っている角。
-          const fw = o.type.r * 0.85, fd = o.type.r * 0.55;
-          const corners = [[-fw,-fd],[fw,-fd],[fw,fd],[-fw,fd]];
-          let anyInside = false; const outsideCorners = [];
-          for (const [lx, ly] of corners) {
-            const wx = o.x + lx, wy = o.y + ly;
-            if (Math.hypot(e.x - wx, e.y - wy) < e.r) anyInside = true;
-            else outsideCorners.push({ x: wx, y: wy });
-          }
-          if (anyInside) {
-            let pivotX = o.x, pivotY = o.y, sign = 1;
-            if (outsideCorners.length > 0) {
-              pivotX = 0; pivotY = 0;
-              for (const p of outsideCorners) { pivotX += p.x; pivotY += p.y; }
-              pivotX /= outsideCorners.length; pivotY /= outsideCorners.length;
-              const v1x = o.x - pivotX, v1y = o.y - pivotY, v2x = e.x - pivotX, v2y = e.y - pivotY;
-              sign = (v1x*v2y - v1y*v2x) >= 0 ? 1 : -1;
-            }
-            startFall(o, e, true);
-            o.topple = outsideCorners.length > 0;
-            o.pivotX = pivotX; o.pivotY = pivotY; o.toppleSign = sign;
-            o.toppleStartAngle = 0;
-          }
-        }
-
-        // 地図の外に出ないように保険
-        o.x = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.x));
-        o.y = Math.max(o.type.r, Math.min(WORLD_SIZE - o.type.r, o.y));
+        const need = o.type.round ? bot.r*0.9 : bot.r*0.9;
+        if (bot.r < o.type.hw*0.7 && bot.r < o.type.hd*0.7) continue;
+        const d = Math.hypot(o.x-bot.position.x, o.z-bot.position.z);
+        if (d < bd) { bd = d; best = o; }
       }
-
-      for (const other of entities) {
-        if (other === e || other.respawnT > 0) continue;
-        if (e.r > other.r * 1.25) {
-          const dist = Math.hypot(e.x - other.x, e.y - other.y);
-          if (dist < e.r * 0.8) {
-            e.score += Math.floor(other.score * 0.5) + 50;
-            addArea(e, other.r * other.r * Math.PI * 0.6);
-            other.respawnT = 3.0;
-            createPopParticles(other.x, other.y, other.color, 15);
-          }
-        }
-      }
+      bot.target = best;
     }
-
-    for (let i = objects.length - 1; i >= 0; i--) {
-      const o = objects[i];
-      if (o.falling) {
-        const rate = o.tight ? 1.9 : 3.5;
-        o.fallT += dt * rate;
-        if (o.fallT >= 1) {
-          const bonus = o.tight ? 1.5 : 1;
-          o.eater.score += Math.round(o.type.pts * bonus);
-          addArea(o.eater, o.type.pts * CONFIG.GROWTH_MULT * (o.tight ? 1.2 : 1));
-          createPopParticles(o.x, o.y, o.eater.color, o.tight ? 26 : 15);
-          removeFromBuckets(o);
-          objects.splice(i, 1);
-          spawnObject(Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
-        }
-      }
-    }
-
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const pt = particles[i];
-      pt.x += pt.vx * dt; pt.y += pt.vy * dt;
-      pt.life -= dt;
-      if (pt.life <= 0) particles.splice(i, 1);
-    }
-
-    if (p.respawnT <= 0) {
-      camX += (p.x - camX) * dt * 4.0;
-      camY += (p.y - camY) * dt * 4.0;
-      const targetZoom = Math.max(0.16, 2.3 / Math.pow(p.r / INIT_R, 0.6));
-      curZoom += (targetZoom - curZoom) * dt * 3.0;
-    }
-
-    updateUI();
+    if (bot.target) target = { x: bot.target.x, z: bot.target.z };
   }
-
-  function createPopParticles(x, y, color, count) {
-    count = count || 15;
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const spd = 50 + Math.random() * 150;
-      particles.push({
-        x, y, vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd,
-        life: 0.6, maxLife: 0.6, color, size: 3 + Math.random()*4
-      });
-    }
+  const speed = speedFor(bot.r);
+  if (target) {
+    const dx = target.x - bot.position.x, dz = target.z - bot.position.z;
+    const d = Math.hypot(dx,dz) || 1;
+    bot.vx = dx/d*speed; bot.vz = dz/d*speed;
+  } else {
+    bot.wanderT -= dt;
+    if (bot.wanderT <= 0) { bot.wanderAngle = Math.random()*Math.PI*2; bot.wanderT = 1.5+Math.random()*2; }
+    bot.vx = Math.cos(bot.wanderAngle)*speed*0.6; bot.vz = Math.sin(bot.wanderAngle)*speed*0.6;
   }
+  bot.position.x = Math.max(-CONFIG.WORLD_SIZE/2+bot.r, Math.min(CONFIG.WORLD_SIZE/2-bot.r, bot.position.x + bot.vx*dt));
+  bot.position.z = Math.max(-CONFIG.WORLD_SIZE/2+bot.r, Math.min(CONFIG.WORLD_SIZE/2-bot.r, bot.position.z + bot.vz*dt));
+}
 
-  function shade(color, percent) {
-    let f = parseInt(color.slice(1), 16), t = percent < 0 ? 0 : 255, p = percent < 0 ? percent * -1 : percent;
-    let R = f >> 16, G = f >> 8 & 0x00FF, B = f & 0x0000FF;
-    return "#" + (0x1000000 + (Math.round((t - R) * p) + R) * 0x10000 + (Math.round((t - G) * p) + G) * 0x100 + (Math.round((t - B) * p) + B)).toString(16).slice(1);
-  }
+function updateEntities(dt) {
+  const p = player();
+  const speed = speedFor(p.r);
+  if (joy.active && joy.mag > 0.05) {
+    p.vx = joy.dx * speed * joy.mag;
+    p.vz = joy.dy * speed * joy.mag;
+  } else { p.vx *= 0.85; p.vz *= 0.85; }
+  p.position.x = Math.max(-CONFIG.WORLD_SIZE/2+p.r, Math.min(CONFIG.WORLD_SIZE/2-p.r, p.position.x + p.vx*dt));
+  p.position.z = Math.max(-CONFIG.WORLD_SIZE/2+p.r, Math.min(CONFIG.WORLD_SIZE/2-p.r, p.position.z + p.vz*dt));
 
-  // 斜め見下ろし視点:高さのある物は常に同じ方向へ傾く(放射状ではなく一方向)
-  const LEAN_X = 0.16;
-  const LEAN_Y = -0.6;
-  // 倒れ込む時だけ、傾く方向と高さを差し替えるためのオーバーライド
-  let leanOverride = null;   // {x,y} 穴の方向へのリーン
-  let heightMulOverride = null; // 1→0 で高さを潰し、寝転がせる
-  function getTopPos(sx, sy, h) {
-    if (leanOverride) return { tx: sx + h * leanOverride.x, ty: sy + h * leanOverride.y };
-    return {
-      tx: sx + h * LEAN_X,
-      ty: sy + h * LEAN_Y
-    };
-  }
+  for (let i = 1; i < entities.length; i++) botAI(entities[i], dt);
+  entities.forEach(updateEntityMesh);
+}
 
-  function drawQuad(p1, p2, p3, p4, color) {
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-    ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1; ctx.stroke();
-  }
-
-  // 太陽と反対方向へ伸びる落ち影。高いオブジェクトほど影が長くなる
-  function drawCastShadow(sx, sy, footW, footH, heightPx) {
-    const ox = -LIGHT.x * heightPx * 0.5;
-    const oy = -LIGHT.y * heightPx * 0.5 * 0.6;
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = '#1a2b1f';
-    ctx.beginPath();
-    ctx.ellipse(sx + ox, sy + oy, footW + heightPx*0.12, footH*0.6 + heightPx*0.06, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawBox(sx, sy, w, h, col, scale, fallT) {
-    const hMul = heightMulOverride === null ? 1 : heightMulOverride;
-    const size = w * curZoom * scale * 0.5;
-    const actualH = h * curZoom * scale * hMul;
-    drawCastShadow(sx, sy, size, size*0.7, actualH);
-    const { tx, ty } = getTopPos(sx, sy, actualH);
-
-    const b1 = {x: sx - size, y: sy - size}; const b2 = {x: sx + size, y: sy - size};
-    const b3 = {x: sx + size, y: sy + size}; const b4 = {x: sx - size, y: sy + size};
-    const t1 = {x: tx - size, y: ty - size}; const t2 = {x: tx + size, y: ty - size};
-    const t3 = {x: tx + size, y: ty + size}; const t4 = {x: tx - size, y: ty + size};
-
-    const cSide1 = shade(col, -0.06); const cSide2 = shade(col, -0.42);
-
-    ctx.globalAlpha = 1 - fallT * 0.6;
-
-    const dx = tx - sx, dy = ty - sy;
-    if (dy < 0) drawQuad(b4, b3, t3, t4, cSide1); else drawQuad(b1, b2, t2, t1, cSide1);
-    if (dx < 0) drawQuad(b2, b3, t3, t2, cSide2); else drawQuad(b1, b4, t4, t1, cSide2);
-    drawQuad(t1, t2, t3, t4, shade(col, 0.22));
-
-    ctx.globalAlpha = 1.0;
-  }
-
-  function drawCylinder(sx, sy, r, h, col, scale, fallT) {
-    const hMul = heightMulOverride === null ? 1 : heightMulOverride;
-    const size = r * curZoom * scale;
-    const actualH = h * curZoom * scale * hMul;
-    drawCastShadow(sx, sy, size, size*0.7, actualH);
-    const { tx, ty } = getTopPos(sx, sy, actualH);
-
-    ctx.globalAlpha = 1 - fallT * 0.6;
-
-    const angle = Math.atan2(ty - sy, tx - sx);
-    const p1 = { x: sx + Math.cos(angle + Math.PI/2) * size, y: sy + Math.sin(angle + Math.PI/2) * size };
-    const p2 = { x: sx + Math.cos(angle - Math.PI/2) * size, y: sy + Math.sin(angle - Math.PI/2) * size };
-    const p3 = { x: tx + Math.cos(angle - Math.PI/2) * size, y: ty + Math.sin(angle - Math.PI/2) * size };
-    const p4 = { x: tx + Math.cos(angle + Math.PI/2) * size, y: ty + Math.sin(angle + Math.PI/2) * size };
-
-    drawQuad(p1, p2, p3, p4, shade(col, -0.32));
-
-    ctx.fillStyle = shade(col, 0.18);
-    ctx.beginPath(); ctx.arc(tx, ty, size, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.stroke();
-
-    ctx.globalAlpha = 1.0;
-    return { tx, ty };
-  }
-
-  function drawBalloon(sx, sy, t, scale, fallT) {
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    const rad = t.r * 1.6 * curZoom * scale;
-    const cy = sy - t.h * curZoom * scale;
-    const grad = ctx.createRadialGradient(sx - rad*0.3, cy - rad*0.3, rad*0.15, sx, cy, rad);
-    grad.addColorStop(0, shade(t.col, 0.4));
-    grad.addColorStop(1, shade(t.col, -0.1));
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(sx, cy, rad, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = Math.max(1, curZoom);
-    ctx.beginPath(); ctx.moveTo(sx, cy + rad); ctx.lineTo(sx, sy); ctx.stroke();
-    ctx.restore();
-  }
-
-  // 自転車:実際に押し出された(立体の)ホイール2つ+フレーム+サドルで構成
-  function drawBicycle(sx, sy, t, scale, fallT) {
-    const sep = t.r * 0.85 * curZoom * scale;
-    const wheelR = t.r * 0.42;
-    const wheelH = t.r * 0.14;
-    const wx1 = sx - sep, wx2 = sx + sep;
-    drawCylinder(wx1, sy, wheelR, wheelH, '#1c2026', scale, fallT);
-    drawCylinder(wx2, sy, wheelR, wheelH, '#1c2026', scale, fallT);
-    const frameY = sy - wheelH * curZoom * scale * 0.5;
-    drawBox(sx, frameY, t.r * 1.4, t.r * 0.28, t.col, scale, fallT);
-    drawCylinder(sx + t.r*0.25*curZoom*scale, frameY, t.r * 0.11, t.r * 0.85, shade(t.col, -0.25), scale, fallT);
-  }
-
-  // 円柱状の建物:輪郭が丸いので、穴にすっと綺麗にはまる感触を出す
-  function drawSilo(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r, t.h, t.col, scale, fallT);
-    drawCylinder(sx, sy, t.r * 0.97, t.h * 0.5, shade(t.col, 0.18), scale, fallT);
-  }
-  function drawTowerRound(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r * 0.8, t.h, t.col, scale, fallT);
-    drawCylinder(sx, sy, t.r * 0.55, t.h * 1.12, shade(t.col, 0.2), scale, fallT);
-  }
-
-  // 複雑な構造の建物:非対称な増築部分があり、穴に引っかかりやすい印象を出す
-  function drawHydrant(sx, sy, t, scale, fallT) {
-    // 郵便ポスト:丸胴+スロット+てっぺんの蓋
-    drawCylinder(sx, sy, t.r * 0.65, t.h * 0.75, '#c0392b', scale, fallT);
-    drawCylinder(sx, sy - t.h * curZoom * scale * 0.72, t.r * 0.72, t.r * 0.22, '#a5281e', scale, fallT);
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    const slotW = t.r * 0.5 * curZoom * scale, slotH = t.r * 0.08 * curZoom * scale;
-    ctx.fillRect(sx - slotW/2, sy - t.h*curZoom*scale*0.58, slotW, slotH);
-    ctx.restore();
-  }
-  function drawLamp(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r * 0.11, t.h, '#33363f', scale, fallT);
-    const poleTopY = sy - t.h * curZoom * scale * 0.95;
-    const armLen = t.r * 0.95 * curZoom * scale;
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    ctx.strokeStyle = '#33363f';
-    ctx.lineWidth = Math.max(1.5, t.r * 0.09 * curZoom * scale);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sx, poleTopY);
-    ctx.lineTo(sx + armLen, poleTopY - t.r * 0.22 * curZoom * scale);
-    ctx.stroke();
-    const lampX = sx + armLen, lampY = poleTopY - t.r * 0.3 * curZoom * scale;
-    const lampR = t.r * 0.55 * curZoom * scale;
-    const glow = ctx.createRadialGradient(lampX, lampY, 0, lampX, lampY, lampR * 1.8);
-    glow.addColorStop(0, 'rgba(255,244,200,0.85)');
-    glow.addColorStop(1, 'rgba(255,244,200,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(lampX, lampY, lampR * 1.8, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#fff6d8';
-    ctx.beginPath(); ctx.arc(lampX, lampY, lampR * 0.55, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = '#2a2d34'; ctx.lineWidth = Math.max(1, t.r*0.06*curZoom*scale);
-    ctx.stroke();
-    ctx.restore();
-  }
-  // 戸建て:三角屋根・煙突・窓・玄関ドアがある家
-  function drawHouse2(sx, sy, t, scale, fallT) {
-    const wallH = t.h * 0.62;
-    drawBox(sx, sy, t.r * 1.5, wallH, t.col, scale, fallT);
-    const halfW = t.r * 1.5 * curZoom * scale * 0.5;
-    const eaveY = sy - t.h * curZoom * scale * 0.6;
-    const roofTopY = eaveY - t.r * 0.6 * curZoom * scale;
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    ctx.beginPath();
-    ctx.moveTo(sx - halfW * 1.1, eaveY);
-    ctx.lineTo(sx + halfW * 1.1, eaveY);
-    ctx.lineTo(sx, roofTopY);
-    ctx.closePath();
-    ctx.fillStyle = '#8a4a3a';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(160,210,255,0.85)';
-    const winY = sy - t.h * curZoom * scale * 0.35;
-    ctx.fillRect(sx - halfW*0.65, winY - halfW*0.14, halfW*0.34, halfW*0.3);
-    ctx.fillRect(sx + halfW*0.32, winY - halfW*0.14, halfW*0.34, halfW*0.3);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth=1;
-    ctx.strokeRect(sx - halfW*0.65, winY - halfW*0.14, halfW*0.34, halfW*0.3);
-    ctx.strokeRect(sx + halfW*0.32, winY - halfW*0.14, halfW*0.34, halfW*0.3);
-    ctx.fillStyle = '#5c3a26';
-    ctx.fillRect(sx - halfW*0.14, sy - halfW*0.1, halfW*0.28, halfW*0.62);
-    ctx.restore();
-    drawBox(sx + halfW*0.55, eaveY + halfW*0.1, t.r*0.16, t.h*0.32, '#7a6a5a', scale, fallT);
-  }
-  function drawComplex(sx, sy, t, scale, fallT) {
-    const w = t.r * 1.5, h = t.h;
-    drawBox(sx, sy, w, h, t.col, scale, fallT);
-    const off = t.r * 0.85 * curZoom * scale;
-    drawBox(sx + off, sy + off * 0.4, t.r * 0.85, t.h * 0.55, shade(t.col, -0.12), scale, fallT);
-    // バルコニー(段ごとに小さく張り出す板)
-    ctx.save();
-    ctx.globalAlpha = 1 - fallT * 0.6;
-    const halfW = w * curZoom * scale * 0.5;
-    const topY = sy - h * curZoom * scale * 0.85;
-    for (let i = 0; i < 3; i++) {
-      const by = topY + i * h * curZoom * scale * 0.24;
-      ctx.fillStyle = shade(t.col, 0.05);
-      ctx.fillRect(sx - halfW*0.7, by, halfW*1.4, h*curZoom*scale*0.03);
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
-      ctx.strokeRect(sx - halfW*0.7, by, halfW*1.4, h*curZoom*scale*0.03);
-    }
-    ctx.restore();
-  }
-  function drawComplexTower(sx, sy, t, scale, fallT) {
-    drawBox(sx, sy, t.r * 1.25, t.h, t.col, scale, fallT);
-    const off = t.r * 0.8 * curZoom * scale;
-    drawBox(sx - off, sy + off * 0.35, t.r * 0.78, t.h * 0.6, shade(t.col, -0.15), scale, fallT);
-    drawCylinder(sx, sy - t.h * curZoom * scale * 0.55, t.r * 0.1, t.r * 1.3, '#ff5555', scale, fallT);
-  }
-  function drawLandmark(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r, t.h * 0.35, t.col, scale, fallT);
-    drawBox(sx, sy, t.r * 0.55, t.h, shade(t.col, 0.12), scale, fallT);
-    drawCylinder(sx, sy - t.h * curZoom * scale * 0.9, t.r * 0.11, t.r * 1.1, '#ffd24d', scale, fallT);
-  }
-  function drawHydrant(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r * 0.75, t.h, t.col, scale, fallT);
-  }
-  function drawLamp(sx, sy, t, scale, fallT) {
-    drawCylinder(sx, sy, t.r * 0.15, t.h, '#3d4150', scale, fallT);
-    drawCylinder(sx, sy - t.h * curZoom * scale * 0.85, t.r * 0.5, t.r * 0.5, t.col, scale, fallT);
-  }
-
-  // 低ポリの多面クレーター。角度ごとに面を分割し、光源との向きでシェードを変える
-  function craterPt(sx, sy, rad, radY, rim, ringT, i, segs) {
-    const a = (i / segs) * Math.PI * 2;
-    const wob = rim ? rim[i % rim.length] : 1;
-    return { x: sx + Math.cos(a) * rad * ringT * wob, y: sy + Math.sin(a) * radY * ringT * wob, a };
-  }
-  function drawCrater(sx, sy, rad, radY, rim) {
-    const SEGS = 14;
-    const RING_T = [1.0, 0.6];
-    for (let ring = 0; ring < RING_T.length - 1; ring++) {
-      const rimOuter = ring === 0 ? rim : null;
-      const depthDark = -0.02 - ring * 0.22;
-      for (let i = 0; i < SEGS; i++) {
-        const p1 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i, SEGS);
-        const p2 = craterPt(sx, sy, rad, radY, rimOuter, RING_T[ring], i+1, SEGS);
-        const p3 = craterPt(sx, sy, rad, radY, null, RING_T[ring+1], i+1, SEGS);
-        const p4 = craterPt(sx, sy, rad, radY, null, RING_T[ring+1], i, SEGS);
-        const mid = (p1.a + p2.a) / 2;
-        const facing = Math.cos(mid) * (-LIGHT.x) + Math.sin(mid) * (-LIGHT.y);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
-        ctx.closePath();
-        ctx.fillStyle = shade('#6b5a44', depthDark + facing * 0.14);
-        ctx.fill();
-      }
-    }
-    // 中は真っ暗闇。ここが主役になるよう、大きめの黒い円で占める
-    const voidGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad*RING_T[RING_T.length-1]);
-    voidGrad.addColorStop(0, '#000000');
-    voidGrad.addColorStop(0.85, '#05070a');
-    voidGrad.addColorStop(1, '#0d1116');
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, rad*RING_T[RING_T.length-1], radY*RING_T[RING_T.length-1], 0, 0, Math.PI*2);
-    ctx.fillStyle = voidGrad;
-    ctx.fill();
-  }
-  function drawRubble(sx, sy, rad, radY, rubble) {
-    for (const rb of rubble) {
-      const rx = sx + Math.cos(rb.angle) * rad * rb.distF;
-      const ry = sy + Math.sin(rb.angle) * radY * rb.distF;
-      const s = rad * rb.size;
-      ctx.beginPath();
-      ctx.moveTo(rx, ry - s); ctx.lineTo(rx + s*0.85, ry + s*0.55); ctx.lineTo(rx, ry + s*0.55);
-      ctx.closePath(); ctx.fillStyle = '#5d4f3c'; ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(rx, ry - s); ctx.lineTo(rx - s*0.85, ry + s*0.55); ctx.lineTo(rx, ry + s*0.55);
-      ctx.closePath(); ctx.fillStyle = '#8a7960'; ctx.fill();
-    }
-  }
-
-  function draw() {
-    ctx.fillStyle = '#1b1e24'; // マップ外(圏外)の色
-    ctx.fillRect(0, 0, W, H);
-
-    function toSX(x) { return (x - camX) * curZoom + W/2; }
-    function toSY(y) { return (y - camY) * curZoom * CONFIG.TILT_Y + H/2; }
-
-    const wx0 = toSX(0), wy0 = toSY(0);
-    const ww = WORLD_SIZE * curZoom, wh = WORLD_SIZE * curZoom * CONFIG.TILT_Y;
-
-    ctx.fillStyle = COLORS.bg;
-    ctx.fillRect(wx0, wy0, ww, wh);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(wx0, wy0, ww, wh);
-    ctx.clip();
-
-    const gridSizeX = 250 * curZoom;
-    const gridSizeY = 250 * curZoom * CONFIG.TILT_Y;
-    const offX = toSX(0) % gridSizeX;
-    const offY = toSY(0) % gridSizeY;
-
-    // 縁石(道路の少し外側、暗め)
-    ctx.strokeStyle = COLORS.curb;
-    ctx.lineWidth = 38 * curZoom;
-    ctx.lineCap = 'square';
-    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    // 舗装本体
-    ctx.strokeStyle = COLORS.road;
-    ctx.lineWidth = 30 * curZoom;
-    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    // 車線の破線(ワールド座標基準でパターンを固定し、カメラ移動でずれないようにする)
-    ctx.strokeStyle = COLORS.roadLine;
-    ctx.lineWidth = 3 * curZoom;
-    const dashPeriod = 26 * curZoom;
-    ctx.setLineDash([14*curZoom, 12*curZoom]);
-    ctx.lineDashOffset = ((-toSY(0) % dashPeriod) + dashPeriod) % dashPeriod;
-    for (let x = offX - gridSizeX; x < W + gridSizeX; x += gridSizeX) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    ctx.lineDashOffset = ((-toSX(0) % dashPeriod) + dashPeriod) % dashPeriod;
-    for (let y = offY - gridSizeY; y < H + gridSizeY; y += gridSizeY) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
-    ctx.setLineDash([]);
-
-    // 芝の質感(地図座標に固定された疑似ランダムの葉っぱ模様)
-    const patchStep = 55;
-    const px0 = Math.max(0, Math.floor((camX - (W/2)/curZoom) / patchStep) * patchStep);
-    const px1 = Math.min(WORLD_SIZE, px0 + (W/curZoom) + patchStep*2);
-    const py0 = Math.max(0, Math.floor((camY - (H/2)/(curZoom*CONFIG.TILT_Y)) / patchStep) * patchStep);
-    const py1 = Math.min(WORLD_SIZE, py0 + (H/(curZoom*CONFIG.TILT_Y)) + patchStep*2);
-    for (let gx = px0; gx < px1; gx += patchStep) {
-      for (let gy = py0; gy < py1; gy += patchStep) {
-        const seed = Math.sin(gx*12.9898 + gy*78.233) * 43758.5453;
-        const rv = seed - Math.floor(seed);
-        if (rv > 0.5) continue;
-        const jx = gx + ((seed*7)%1) * patchStep;
-        const jy = gy + ((seed*13)%1) * patchStep;
-        const sx2 = toSX(jx), sy2 = toSY(jy);
-        if (sx2 < -10 || sx2 > W+10 || sy2 < -10 || sy2 > H+10) continue;
-        ctx.strokeStyle = rv < 0.25 ? COLORS.bgDark : COLORS.bgLight;
-        ctx.lineWidth = 2 * curZoom;
-        const ang = rv * Math.PI;
-        ctx.beginPath();
-        ctx.moveTo(sx2 - Math.cos(ang)*5*curZoom, sy2 + Math.sin(ang)*2.5*curZoom);
-        ctx.lineTo(sx2 + Math.cos(ang)*5*curZoom, sy2 - Math.sin(ang)*2.5*curZoom);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-
-    // マップの端をハザードテープ風の縞模様で明示する
-    ctx.save();
-    ctx.lineWidth = 16 * curZoom;
-    ctx.setLineDash([20 * curZoom, 20 * curZoom]);
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.strokeRect(wx0, wy0, ww, wh);
-    ctx.lineDashOffset = 20 * curZoom;
-    ctx.strokeStyle = '#f9ca24';
-    ctx.strokeRect(wx0, wy0, ww, wh);
-    ctx.restore();
-
-    for (const e of entities) {
-      if (e.respawnT > 0) continue;
-      const sx = toSX(e.x); const sy = toSY(e.y);
-      const rad = e.r * curZoom;
-      const radY = rad * CONFIG.TILT_Y;
-
-      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad);
-      grad.addColorStop(0, '#000000');
-      grad.addColorStop(1, '#0d0d10');
-      ctx.beginPath();
-      ctx.ellipse(sx, sy, rad, radY, 0, 0, Math.PI*2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      ctx.strokeStyle = e.color; ctx.globalAlpha = 0.55; ctx.lineWidth = Math.max(1.5, rad*0.045);
-      ctx.beginPath(); ctx.ellipse(sx, sy, rad*1.01, radY*1.01, 0, 0, Math.PI*2); ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      if (!e.isPlayer) {
-        ctx.fillStyle = 'rgba(20,30,25,0.6)';
-        ctx.font = `bold 12px sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText(e.name, sx, sy - rad - 15);
-      }
-    }
-
-    let drawList = [...objects];
-    particles.forEach(p => drawList.push({ isPt: true, ...p }));
-    drawList.sort((a, b) => a.y - b.y);
-
-    for (const o of drawList) {
-      if (o.isPt) {
-        const sx = toSX(o.x), sy = toSY(o.y);
-        ctx.globalAlpha = o.life / o.maxLife;
-        ctx.fillStyle = o.color;
-        ctx.beginPath(); ctx.arc(sx, sy, o.size * curZoom, 0, Math.PI*2); ctx.fill();
-        ctx.globalAlpha = 1.0;
-        continue;
-      }
-
-      let curX = o.x, curY = o.y, scale = 1;
-      if (o.falling && o.eater) {
-        const ease = o.fallT * o.fallT;
-        if (o.topple) {
-          curX = o.startX; curY = o.startY;
-          scale = 1; // 底面は縮めない(縮小=吸い込まれて見える原因だったため撤廃)
-        } else {
-          curX = o.startX + (o.eater.x - o.startX) * ease;
-          curY = o.startY + (o.eater.y - o.startY) * ease;
-          scale = 1 - Math.pow(o.fallT, 2);
-        }
-        if (scale <= 0.05) continue;
-      }
-
-      let sx = toSX(curX); let sy = toSY(curY);
-      const checkR = o.type.h * curZoom * 2;
-      if (sx < -checkR || sx > W + checkR || sy < -checkR || sy > H + checkR) continue;
-
-      if (o.falling && o.topple) {
-        const ease = o.fallT * o.fallT;
-        const holeSx = toSX(o.eater.x), holeSy = toSY(o.eater.y);
-        const ddx = holeSx - sx, ddy = holeSy - sy;
-        const dlen = Math.hypot(ddx, ddy) || 1;
-        // 近づかれた方向(穴の方向)へ、だんだん寝転がるように倒れ込む
-        leanOverride = {
-          x: LEAN_X + (ddx/dlen*1.35 - LEAN_X) * ease,
-          y: LEAN_Y + (ddy/dlen*1.35 - LEAN_Y) * ease
-        };
-        heightMulOverride = 1 - ease; // 高さがだんだん潰れて寝ていく(縮小ではなく倒れる)
-      }
-
-      const squeezing = o.falling && o.tight && !o.topple;
-      if (squeezing) {
-        const sq = 1 - o.fallT * 0.35;
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.scale(sq, 1 / Math.sqrt(sq));
-        ctx.translate(-sx, -sy);
-      }
-
-      const t = o.type;
-      if (t.id === 'person') {
-        drawCylinder(sx, sy, t.r, t.h, t.col, scale, o.fallT);
-        drawCylinder(sx, sy, t.r*0.8, t.h+3, '#ffddaa', scale, o.fallT);
-      } else if (t.id === 'dog') {
-        const ang = Math.atan2(o.vy || 0, o.vx || 1);
-        const hOff = t.r * 1.3 * curZoom * scale;
-        const hx = sx + Math.cos(ang) * hOff, hy = sy + Math.sin(ang) * hOff * 0.5;
-        drawCylinder(sx, sy, t.r, t.h*0.7, t.col, scale, o.fallT);
-        drawCylinder(hx, hy, t.r*0.55, t.h*0.9, shade(t.col, 0.15), scale, o.fallT);
-      } else if (t.id === 'balloon') {
-        drawBalloon(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'cone') {
-        drawCylinder(sx, sy, t.r, t.h, t.col, scale, o.fallT);
-      } else if (t.id === 'hydrant') {
-        drawHydrant(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'bicycle') {
-        drawBicycle(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'lamp') {
-        drawLamp(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'tree') {
-        drawCylinder(sx, sy, t.r*0.3, t.h*0.4, '#a0522d', scale, o.fallT);
-        drawBox(sx, sy, t.r*1.8, t.h, t.col, scale, o.fallT);
-      } else if (t.id === 'car') {
-        drawBox(sx, sy, t.r*1.5, t.h*0.5, t.col, scale, o.fallT);
-        drawBox(sx, sy, t.r*0.8, t.h, '#ecf0f1', scale, o.fallT);
-      } else if (t.id === 'silo') {
-        drawSilo(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'house') {
-        drawHouse2(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'complex') {
-        drawComplex(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'towerRound') {
-        drawTowerRound(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'complexTower') {
-        drawComplexTower(sx, sy, t, scale, o.fallT);
-      } else if (t.id === 'landmark') {
-        drawLandmark(sx, sy, t, scale, o.fallT);
+function checkEating() {
+  for (const e of entities) {
+    for (const o of objects) {
+      if (o.falling) continue;
+      if (o.type.round) {
+        const d = Math.hypot(o.x - e.position.x, o.z - e.position.z);
+        if (d < e.r * 0.72 && e.r > o.type.hw * 0.75) triggerFall(o, e);
       } else {
-        drawBox(sx, sy, t.r*1.6, t.h, t.col, scale, o.fallT);
-      }
-
-      if (squeezing) ctx.restore();
-      leanOverride = null;
-      heightMulOverride = null;
-    }
-
-    if (isPointerDown) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(joyCenter.x, joyCenter.y, 60, 0, Math.PI*2); ctx.stroke();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.beginPath(); ctx.arc(pointerX, pointerY, 20, 0, Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  function updateUI() {
-    document.getElementById('scoreVal').textContent = player().score;
-    document.getElementById('timeVal').textContent = timeLeft;
-    const tb = document.getElementById('timer-box');
-    if (timeLeft <= 10) tb.classList.add('danger');
-    else tb.classList.remove('danger');
-
-    const sorted = [...entities].sort((a, b) => b.score - a.score);
-    const lbHTML = sorted.map((e, idx) => `
-      <div class="lb-row ${e.isPlayer ? 'me' : ''}">
-        <div class="lb-dot" style="background:${e.color}"></div>
-        <div class="lb-name">${idx+1}. ${e.name}</div>
-        <div class="lb-score">${e.score}</div>
-      </div>
-    `).join('');
-    document.getElementById('lb').innerHTML = lbHTML;
-  }
-
-  function loop(now) {
-    if (!lastTime) lastTime = now;
-    const dt = Math.min((now - lastTime) / 1000, 0.05);
-    lastTime = now;
-
-    if (running) {
-      update(dt);
-
-      timerAccum += dt;
-      if (timerAccum >= 1) {
-        timerAccum -= 1;
-        timeLeft--;
-        if (timeLeft <= 0) endGame();
+        if (e.r < o.type.hw * 0.55 && e.r < o.type.hd * 0.55) continue;
+        const corners = [[-o.type.hw,-o.type.hd],[o.type.hw,-o.type.hd],[o.type.hw,o.type.hd],[-o.type.hw,o.type.hd]];
+        let anyInside = false;
+        for (const [lx, lz] of corners) {
+          const d = Math.hypot(o.x+lx-e.position.x, o.z+lz-e.position.z);
+          if (d < e.r) { anyInside = true; break; }
+        }
+        if (anyInside) triggerFall(o, e);
       }
     }
-
-    draw();
-    requestAnimationFrame(loop);
   }
+}
 
-  function startGame() {
-    initWorld();
-    initEntities();
-    timeLeft = GAME_TIME;
-    timerAccum = 0;
-    lastTime = performance.now();
-    running = true;
-    document.getElementById('overlay').classList.add('hidden');
+function updateBoard() {
+  const sorted = [...entities].sort((a,b)=>b.score-a.score);
+  lbEl.innerHTML = sorted.map(e => `<div class="lb-row ${e.isPlayer?'me':''}"><span class="lb-dot" style="background:#${e.colorHex.toString(16).padStart(6,'0')}"></span><span class="lb-name">${e.isPlayer?'YOU':e.name}</span><span class="lb-score">${e.score}</span></div>`).join('');
+}
+
+function endGame() {
+  running = false;
+  const sorted = [...entities].sort((a,b)=>b.score-a.score);
+  const rank = sorted.findIndex(e=>e.isPlayer)+1;
+  const panel = document.getElementById('screen-content');
+  panel.innerHTML = `<p class="title">TIME UP!</p><div class="result-rank">RANK: ${rank} / ${entities.length}</div><div class="result-score">FINAL SCORE: ${player().score}</div><button id="retryBtn">PLAY AGAIN</button>`;
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('retryBtn').addEventListener('click', resetGame);
+}
+
+document.getElementById('startBtn').addEventListener('click', resetGame);
+
+// ---------------- カメラ追従 ----------------
+function updateCamera() {
+  const p = player();
+  const dist = 260 + p.r * 2.2;
+  const height = 220 + p.r * 1.7;
+  camera.position.set(p.position.x - dist*0.35, height, p.position.z + dist*0.9);
+  camera.lookAt(p.position.x, 10, p.position.z);
+}
+
+// ---------------- メインループ ----------------
+let lastTime = performance.now();
+function loop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  if (running) {
+    updateEntities(dt);
+    checkEating();
+    updateFalling(dt);
+    updateBoard();
+    timerAccum += dt;
+    if (timerAccum >= 1) {
+      timerAccum -= 1; timeLeft--;
+      timeVal.textContent = String(Math.max(0, timeLeft));
+      if (timeLeft <= 10) timerBox.classList.add('danger');
+      if (timeLeft <= 0) endGame();
+    }
   }
-
-  function endGame() {
-    running = false;
-    const sorted = [...entities].sort((a, b) => b.score - a.score);
-    const rank = sorted.findIndex(e => e.isPlayer) + 1;
-
-    const panel = document.getElementById('screen-content');
-    panel.innerHTML = `
-      <p class="title">TIME UP!</p>
-      <div class="result-rank">RANK: ${rank} / ${entities.length}</div>
-      <div class="result-score">FINAL SCORE: ${player().score}</div>
-      <button id="retryBtn">PLAY AGAIN</button>
-    `;
-    document.getElementById('overlay').classList.remove('hidden');
-    document.getElementById('retryBtn').addEventListener('click', startGame);
-  }
-
-  function showTitle() {
-    const panel = document.getElementById('screen-content');
-    panel.innerHTML = `
-      <p class="title">CITY <span>HOLE</span></p>
-      <p class="desc">指でスライドして街を飲み込め。<br>大きなライバルからは逃げろ！</p>
-      <button id="startBtn">START</button>
-    `;
-    document.getElementById('startBtn').addEventListener('click', startGame);
-  }
-
-  showTitle();
+  updateCamera();
+  renderer.render(scene, camera);
   requestAnimationFrame(loop);
+}
 
-})();
+resetGame();
+running = false;
+document.getElementById('loading').style.display = 'none';
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
