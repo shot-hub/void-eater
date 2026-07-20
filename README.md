@@ -91,7 +91,7 @@ const CONFIG = {
   OBJECT_COUNT: 140,
   INIT_R: 15,
   MAX_R: 320,
-  GAME_TIME: 120,
+  GAME_TIME: 180,
   SPEED_MIN: 90,
   SPEED_MAX: 260,
   GROWTH_MULT: 30,
@@ -108,13 +108,6 @@ let fadedMeshes = new Set();
 function updateOcclusionFade() {
   const p = player();
   const from = camera.position;
-  const to = new THREE.Vector3(p.position.x, 22, p.position.z);
-  const toCam = to.clone().sub(from);
-  const dist = toCam.length();
-  if (dist < 1) return;
-  occlusionRaycaster.set(from, toCam.normalize());
-  occlusionRaycaster.near = 4;
-  occlusionRaycaster.far = Math.max(4, dist - 6);
 
   const meshesToCheck = [];
   for (const o of objects) {
@@ -122,8 +115,28 @@ function updateOcclusionFade() {
     if (Math.hypot(o.x - p.position.x, o.z - p.position.z) > 500) continue;
     o.model.traverse(m => { if (m.isMesh) meshesToCheck.push(m); });
   }
-  const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
-  const hitSet = new Set(hits.map(h => h.object));
+
+  // 穴の中心だけでなく、円周上の何点かにもレイを飛ばして、
+  // 見た目の円と少しでも重なっている建物は漏れなく検出する
+  const sampleR = p.r * 0.85;
+  const targets = [new THREE.Vector3(p.position.x, 20, p.position.z)];
+  const RAYS = 8;
+  for (let i = 0; i < RAYS; i++) {
+    const a = (i / RAYS) * Math.PI * 2;
+    targets.push(new THREE.Vector3(p.position.x + Math.cos(a) * sampleR, 18, p.position.z + Math.sin(a) * sampleR));
+  }
+
+  const hitSet = new Set();
+  for (const to of targets) {
+    const toCam = to.clone().sub(from);
+    const dist = toCam.length();
+    if (dist < 1) continue;
+    occlusionRaycaster.set(from, toCam.normalize());
+    occlusionRaycaster.near = 4;
+    occlusionRaycaster.far = Math.max(4, dist - 6);
+    const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
+    for (const h of hits) hitSet.add(h.object);
+  }
 
   for (const m of hitSet) {
     if (!fadedMeshes.has(m)) {
@@ -271,6 +284,10 @@ function shadeHex(hex, amt) {
 function stdMat(color) { return new THREE.MeshStandardMaterial({ color }); }
 
 const TYPES = [
+  { id: 'hydrant', hw: 4, hd: 4, height: 9, round: true, pts: 1, build: buildHydrant },
+  { id: 'mailbox', hw: 5, hd: 4, height: 13, round: false, pts: 2, build: buildMailbox },
+  { id: 'trashcan', hw: 5, hd: 5, height: 11, round: true, pts: 2, build: buildTrashcan },
+  { id: 'lamppost', hw: 3, hd: 3, height: 32, round: true, pts: 3, build: buildLamppost },
   { id: 'cone', hw: 6, hd: 6, height: 22, round: false, pts: 3, build: buildCone },
   { id: 'bench', hw: 14, hd: 7, height: 24, round: false, pts: 8, build: buildBench },
   { id: 'tree', hw: 18, hd: 18, height: 42, round: true, pts: 16, build: buildTree },
@@ -365,6 +382,47 @@ function buildLandmark(t) {
   return g;
 }
 
+function buildHydrant(t) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(t.hw*0.7, t.hw*0.8, 8, 10), stdMat(0xd7362b));
+  body.position.y = 4; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(t.hw*0.55, 10, 8), stdMat(0xb52a20));
+  cap.position.y = 9; cap.castShadow = true;
+  g.add(cap);
+  return g;
+}
+function buildMailbox(t) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.BoxGeometry(1.4, 8, 1.4), stdMat(0x555555));
+  post.position.y = 4; post.castShadow = true;
+  g.add(post);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(t.hw*1.8, 5, t.hd*1.8), stdMat(0x2e5fa3));
+  box.position.y = 10.5; box.castShadow = true; box.receiveShadow = true;
+  g.add(box);
+  return g;
+}
+function buildTrashcan(t) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(t.hw, t.hw*0.85, 11, 12), stdMat(0x4a5a4a));
+  body.position.y = 5.5; body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(t.hw*1.05, t.hw*1.05, 1.5, 12), stdMat(0x3a463a));
+  lid.position.y = 11.5; lid.castShadow = true;
+  g.add(lid);
+  return g;
+}
+function buildLamppost(t) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(t.hw*0.4, t.hw*0.5, 28, 8), stdMat(0x333640));
+  pole.position.y = 14; pole.castShadow = true;
+  g.add(pole);
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2b0, emissive: 0xffcc55, emissiveIntensity: 0.6 });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(t.hw*1.1, 10, 8), lampMat);
+  lamp.position.y = 29; lamp.castShadow = true;
+  g.add(lamp);
+  return g;
+}
 function buildCone(t) {
   const g = new THREE.Group();
   const m = new THREE.Mesh(new THREE.ConeGeometry(t.hw, 22, 16), stdMat(0xff8a3d));
@@ -440,35 +498,83 @@ function buildHouse(t) {
 let objects = [];
 function pickType() { return TYPES[Math.floor(Math.random() * TYPES.length)]; }
 
-function spawnObjectAt(x, z) {
-  const t = pickType();
+// 簡易空間ハッシュ:大きい建物(半径190)にも対応できるバケット幅
+const BUCKET = 420;
+let spatialBuckets = new Map();
+function bucketKeyOf(x, z) { return Math.floor(x / BUCKET) + ',' + Math.floor(z / BUCKET); }
+function addToBuckets(o) {
+  const key = bucketKeyOf(o.x, o.z);
+  if (!spatialBuckets.has(key)) spatialBuckets.set(key, new Set());
+  spatialBuckets.get(key).add(o);
+  o._bucketKey = key;
+}
+function removeFromBuckets(o) {
+  const set = spatialBuckets.get(o._bucketKey);
+  if (set) set.delete(o);
+}
+function overlapsExisting(t, x, z) {
+  const bx = Math.floor(x / BUCKET), bz = Math.floor(z / BUCKET);
+  const rr = Math.max(t.hw, t.hd);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const set = spatialBuckets.get((bx+dx) + ',' + (bz+dz));
+      if (!set) continue;
+      for (const other of set) {
+        const d = Math.hypot(other.x - x, other.z - z);
+        const otherR = Math.max(other.type.hw, other.type.hd);
+        if (d < (rr + otherR) * 0.92) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function spawnObjectAt(x, z, t) {
+  t = t || pickType();
   const model = t.build(t);
   const pivot = new THREE.Group();
   model.position.set(0, 0, 0);
   pivot.position.set(x, 0, z);
   pivot.add(model);
   scene.add(pivot);
-  objects.push({
+  const o = {
     type: t, x, z, model, pivot,
     leanAngle: 0, leanCorners: 0,
     falling: false, committed: false, caught: false,
     fallT: 0, eater: null, topple: false, fallAxis: null, startAngle: 0, catchAngle: 0
-  });
+  };
+  objects.push(o);
+  addToBuckets(o);
 }
 function initObjects() {
   for (const o of objects) { scene.remove(o.pivot); }
   objects = [];
+  spatialBuckets = new Map();
   for (let i = 0; i < CONFIG.OBJECT_COUNT; i++) {
-    const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
-    const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
-    spawnObjectAt(x, z);
+    let placed = false;
+    for (let attempt = 0; attempt < 8 && !placed; attempt++) {
+      const t = pickType();
+      const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+      const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+      if (overlapsExisting(t, x, z)) continue;
+      spawnObjectAt(x, z, t);
+      placed = true;
+    }
   }
 }
 function respawnObject(old) {
+  removeFromBuckets(old);
   scene.remove(old.pivot);
-  const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
-  const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
-  spawnObjectAt(x, z);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const t = pickType();
+    const x = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+    const z = (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 100);
+    if (overlapsExisting(t, x, z)) continue;
+    spawnObjectAt(x, z, t);
+    return;
+  }
+  const t = pickType();
+  spawnObjectAt((Math.random()-0.5)*(CONFIG.WORLD_SIZE-100), (Math.random()-0.5)*(CONFIG.WORLD_SIZE-100), t);
 }
 function resetLean(o) {
   o.pivot.position.set(o.x, 0, o.z);
@@ -678,6 +784,7 @@ function startPlaying() {
 }
 
 function botAI(bot, dt) {
+  bot.targetStuckT = (bot.targetStuckT || 0) + dt;
   let target = null, flee = false, bestD = Infinity;
   for (const other of entities) {
     if (other === bot) continue;
@@ -685,16 +792,17 @@ function botAI(bot, dt) {
     if (other.r > bot.r * 1.2 && d < 260) { target = { x: bot.position.x - (other.position.x-bot.position.x), z: bot.position.z - (other.position.z-bot.position.z) }; flee = true; break; }
   }
   if (!flee) {
-    if (!bot.target || bot.target.falling) {
+    if (!bot.target || bot.target.falling || bot.targetStuckT > 2.5) {
       let best = null, bd = Infinity;
       for (const o of objects) {
         if (o.falling) continue;
-        const need = o.type.round ? bot.r*0.9 : bot.r*0.9;
-        if (bot.r < o.type.hw*0.7 && bot.r < o.type.hd*0.7) continue;
+        if (o.type.round) { if (bot.r < o.type.hw * 0.75) continue; }
+        else { if (bot.r < Math.min(o.type.hw, o.type.hd) * 0.85) continue; }
         const d = Math.hypot(o.x-bot.position.x, o.z-bot.position.z);
         if (d < bd) { bd = d; best = o; }
       }
       bot.target = best;
+      bot.targetStuckT = 0;
     }
     if (bot.target) target = { x: bot.target.x, z: bot.target.z };
   }
