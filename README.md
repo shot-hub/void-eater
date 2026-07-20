@@ -1,5 +1,5 @@
 # void-eater
-<!DOCTYPE html>
+　<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -130,10 +130,40 @@ scene.add(sun);
 scene.add(sun.target);
 
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x7fae52 });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE), groundMat);
+const MAX_HOLES_SHADER = 4;
+groundMat.onBeforeCompile = (shader) => {
+  shader.uniforms.holePos = { value: Array.from({length: MAX_HOLES_SHADER}, () => new THREE.Vector2(99999, 99999)) };
+  shader.uniforms.holeR = { value: new Array(MAX_HOLES_SHADER).fill(0) };
+  shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>\n    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;`
+  );
+  shader.fragmentShader = 'varying vec3 vWorldPos;\nuniform vec2 holePos[' + MAX_HOLES_SHADER + '];\nuniform float holeR[' + MAX_HOLES_SHADER + '];\n' + shader.fragmentShader.replace(
+    '#include <clipping_planes_fragment>',
+    `#include <clipping_planes_fragment>
+    for (int hi = 0; hi < ${MAX_HOLES_SHADER}; hi++) {
+      if (distance(vWorldPos.xz, holePos[hi]) < holeR[hi]) discard;
+    }`
+  );
+  groundMat.userData.shader = shader;
+};
+groundMat.customProgramCacheKey = () => 'groundHoleCutout';
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE, 1, 1), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
+function updateGroundHoles() {
+  const sh = groundMat.userData.shader;
+  if (!sh) return;
+  for (let i = 0; i < MAX_HOLES_SHADER; i++) {
+    if (entities[i]) {
+      sh.uniforms.holePos.value[i].set(entities[i].position.x, entities[i].position.z);
+      sh.uniforms.holeR.value[i] = entities[i].r * 0.98;
+    } else {
+      sh.uniforms.holeR.value[i] = 0;
+    }
+  }
+}
 
 // マップの端をハザードストライプで示す
 const edgeMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
@@ -481,9 +511,11 @@ function updateLeanPhysics(o, e) {
   const axis = fallAxisToward(px, pz, e.position.x, e.position.z);
   o.pivot.quaternion.setFromAxisAngle(axis, o.leanAngle);
 
-  // 重心(中心)が穴の内側まで来てしまったら、もう起き上がれない
+  // 重心(中心)が穴に十分深く入り、角もほとんど飲み込まれた時だけ後戻りできなくなる。
+  // ここを緩くしすぎると、普通の速度で近づいただけで一瞬で確定してしまい、
+  // 可逆的に傾く区間が体感できなくなる。
   const centerDist = Math.hypot(o.x - e.position.x, o.z - e.position.z);
-  if (centerDist < e.r) {
+  if (centerDist < e.r * 0.55 && insideCount >= 3) {
     commitTopple(o, e, pivotPos);
   }
 }
@@ -664,7 +696,7 @@ function checkEating() {
         const d = Math.hypot(o.x - e.position.x, o.z - e.position.z);
         if (d < e.r * 0.72 && e.r > o.type.hw * 0.75) commitStraightDrop(o, e);
       } else {
-        if (e.r < o.type.hw * 0.55 && e.r < o.type.hd * 0.55) continue;
+        if (e.r < Math.min(o.type.hw, o.type.hd) * 0.85) continue;
         updateLeanPhysics(o, e);
       }
     }
@@ -715,6 +747,7 @@ function loop(now) {
       if (timeLeft <= 0) endGame();
     }
   }
+  updateGroundHoles();
   updateCamera();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
