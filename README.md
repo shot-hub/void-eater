@@ -117,7 +117,7 @@ function updateOcclusionFade() {
   for (const o of objects) {
     if (o.falling) continue;
     if (Math.hypot(o.x - p.position.x, o.z - p.position.z) > 550) continue;
-    o.model.traverse(m => { if (m.isMesh) meshesToCheck.push(m); });
+    meshesToCheck.push(o.proxy);
   }
 
   // 穴の見た目の円全体を、複数の同心円×複数角度でびっしりサンプリングする。
@@ -133,7 +133,7 @@ function updateOcclusionFade() {
     }
   }
 
-  const hitSet = new Set();
+  const hitProxies = new Set();
   for (const to of targets) {
     const toCam = to.clone().sub(from);
     const dist = toCam.length();
@@ -142,7 +142,13 @@ function updateOcclusionFade() {
     occlusionRaycaster.near = 4;
     occlusionRaycaster.far = Math.max(4, dist - 4);
     const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
-    for (const h of hits) hitSet.add(h.object);
+    for (const h of hits) hitProxies.add(h.object);
+  }
+
+  const hitSet = new Set();
+  for (const o of objects) {
+    if (!hitProxies.has(o.proxy)) continue;
+    o.model.traverse(m => { if (m.isMesh && m !== o.proxy) hitSet.add(m); });
   }
 
   for (const m of hitSet) {
@@ -161,13 +167,13 @@ function updateOcclusionFade() {
   }
   fadedMeshes = hitSet;
   const debugEl = document.getElementById('debugVal');
-  if (debugEl) debugEl.textContent = String(hitSet.size);
+  if (debugEl) debugEl.textContent = String(hitProxies.size);
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('canvasWrap').appendChild(renderer.domElement);
 
@@ -181,11 +187,6 @@ const hemi = new THREE.HemisphereLight(0xffffff, 0x6b8e4e, 0.85);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4d6, 1.15);
 sun.position.set(-500, 700, -350);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -700; sun.shadow.camera.right = 700;
-sun.shadow.camera.top = 700; sun.shadow.camera.bottom = -700;
-sun.shadow.camera.far = 2000;
 scene.add(sun);
 scene.add(sun.target);
 
@@ -538,16 +539,29 @@ function overlapsExisting(t, x, z) {
   return false;
 }
 
+function makeProxy(t) {
+  const size = Math.max(t.hw, t.hd);
+  const geo = t.round
+    ? new THREE.CylinderGeometry(size, size, t.height, 8)
+    : new THREE.BoxGeometry(t.hw * 2, t.height, t.hd * 2);
+  const mat = new THREE.MeshBasicMaterial({ visible: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = t.height / 2;
+  return mesh;
+}
+
 function spawnObjectAt(x, z, t) {
   t = t || pickType();
   const model = t.build(t);
+  const proxy = makeProxy(t);
+  model.add(proxy); // 見た目とは別に、当たり判定・オクルージョン専用の簡易形状
   const pivot = new THREE.Group();
   model.position.set(0, 0, 0);
   pivot.position.set(x, 0, z);
   pivot.add(model);
   scene.add(pivot);
   const o = {
-    type: t, x, z, model, pivot,
+    type: t, x, z, model, pivot, proxy,
     leanAngle: 0, leanCorners: 0,
     falling: false, committed: false, caught: false,
     fallT: 0, eater: null, topple: false, fallAxis: null, startAngle: 0, catchAngle: 0
