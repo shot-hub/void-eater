@@ -103,39 +103,34 @@ scene.background = new THREE.Color(0xbfe3f2);
 scene.fog = new THREE.Fog(0xbfe3f2, 700, 2200);
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 4000);
-const occlusionRaycaster = new THREE.Raycaster();
 let fadedMeshes = new Set();
 function updateOcclusionFade() {
   const p = player();
-  const from = camera.position;
-
-  const meshesToCheck = [];
-  for (const o of objects) {
-    if (o.falling) continue;
-    if (Math.hypot(o.x - p.position.x, o.z - p.position.z) > 500) continue;
-    o.model.traverse(m => { if (m.isMesh) meshesToCheck.push(m); });
-  }
-
-  // 穴の中心だけでなく、円周上の何点かにもレイを飛ばして、
-  // 見た目の円と少しでも重なっている建物は漏れなく検出する
-  const sampleR = p.r * 0.85;
-  const targets = [new THREE.Vector3(p.position.x, 20, p.position.z)];
-  const RAYS = 8;
-  for (let i = 0; i < RAYS; i++) {
-    const a = (i / RAYS) * Math.PI * 2;
-    targets.push(new THREE.Vector3(p.position.x + Math.cos(a) * sampleR, 18, p.position.z + Math.sin(a) * sampleR));
-  }
+  const holeWorldPos = new THREE.Vector3(p.position.x, p.r * 0.3, p.position.z);
+  const holeDistToCam = camera.position.distanceTo(holeWorldPos);
+  const holeScreen = holeWorldPos.clone().project(camera);
+  const holeScreenR = (p.r / holeDistToCam) * 1.15;
 
   const hitSet = new Set();
-  for (const to of targets) {
-    const toCam = to.clone().sub(from);
-    const dist = toCam.length();
-    if (dist < 1) continue;
-    occlusionRaycaster.set(from, toCam.normalize());
-    occlusionRaycaster.near = 4;
-    occlusionRaycaster.far = Math.max(4, dist - 6);
-    const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
-    for (const h of hits) hitSet.add(h.object);
+  for (const o of objects) {
+    if (o.falling) continue;
+    const worldDist = Math.hypot(o.x - p.position.x, o.z - p.position.z);
+    if (worldDist > 550) continue;
+
+    const objWorldPos = new THREE.Vector3(o.x, o.type.height * 0.5, o.z);
+    const objDistToCam = camera.position.distanceTo(objWorldPos);
+    if (objDistToCam > holeDistToCam - 4) continue; // 穴より手前にある物だけを対象にする
+
+    const objScreen = objWorldPos.clone().project(camera);
+    if (objScreen.z > 1 || objScreen.z < -1) continue; // 画面の外(カメラの裏側等)
+
+    const dxS = objScreen.x - holeScreen.x, dyS = objScreen.y - holeScreen.y;
+    const screenDist = Math.hypot(dxS, dyS);
+    const objScreenR = (Math.max(o.type.hw, o.type.hd) / objDistToCam) * 1.3;
+
+    if (screenDist < holeScreenR + objScreenR) {
+      o.model.traverse(m => { if (m.isMesh) hitSet.add(m); });
+    }
   }
 
   for (const m of hitSet) {
@@ -810,14 +805,20 @@ function botAI(bot, dt) {
   if (target) {
     const dx = target.x - bot.position.x, dz = target.z - bot.position.z;
     const d = Math.hypot(dx,dz) || 1;
-    bot.vx = dx/d*speed; bot.vz = dz/d*speed;
+    if (!flee && d < bot.r * 0.4) {
+      // 既に対象の真上まで来ている:これ以上追いかけようとすると
+      // 毎フレーム行き過ぎては戻りを繰り返して震えて見えるので、ここで待つ
+      bot.vx *= 0.7; bot.vz *= 0.7;
+    } else {
+      bot.vx = dx/d*speed; bot.vz = dz/d*speed;
+    }
   } else {
     bot.wanderT -= dt;
     if (bot.wanderT <= 0) { bot.wanderAngle = Math.random()*Math.PI*2; bot.wanderT = 1.5+Math.random()*2; }
     bot.vx = Math.cos(bot.wanderAngle)*speed*0.6; bot.vz = Math.sin(bot.wanderAngle)*speed*0.6;
   }
-  bot.position.x = Math.max(-CONFIG.WORLD_SIZE/2+bot.r, Math.min(CONFIG.WORLD_SIZE/2-bot.r, bot.position.x + bot.vx*dt));
-  bot.position.z = Math.max(-CONFIG.WORLD_SIZE/2+bot.r, Math.min(CONFIG.WORLD_SIZE/2-bot.r, bot.position.z + bot.vz*dt));
+  bot.position.x = Math.max(-CONFIG.WORLD_SIZE/2+6, Math.min(CONFIG.WORLD_SIZE/2-6, bot.position.x + bot.vx*dt));
+  bot.position.z = Math.max(-CONFIG.WORLD_SIZE/2+6, Math.min(CONFIG.WORLD_SIZE/2-6, bot.position.z + bot.vz*dt));
 }
 
 function updateEntities(dt) {
@@ -827,8 +828,8 @@ function updateEntities(dt) {
     p.vx = joy.dx * speed * joy.mag;
     p.vz = joy.dy * speed * joy.mag;
   } else { p.vx *= 0.85; p.vz *= 0.85; }
-  p.position.x = Math.max(-CONFIG.WORLD_SIZE/2+p.r, Math.min(CONFIG.WORLD_SIZE/2-p.r, p.position.x + p.vx*dt));
-  p.position.z = Math.max(-CONFIG.WORLD_SIZE/2+p.r, Math.min(CONFIG.WORLD_SIZE/2-p.r, p.position.z + p.vz*dt));
+  p.position.x = Math.max(-CONFIG.WORLD_SIZE/2+6, Math.min(CONFIG.WORLD_SIZE/2-6, p.position.x + p.vx*dt));
+  p.position.z = Math.max(-CONFIG.WORLD_SIZE/2+6, Math.min(CONFIG.WORLD_SIZE/2-6, p.position.z + p.vz*dt));
 
   for (let i = 1; i < entities.length; i++) botAI(entities[i], dt);
   entities.forEach(updateEntityMesh);
