@@ -1,5 +1,5 @@
 # void-eater
-　<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -103,6 +103,44 @@ scene.background = new THREE.Color(0xbfe3f2);
 scene.fog = new THREE.Fog(0xbfe3f2, 700, 2200);
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 4000);
+const occlusionRaycaster = new THREE.Raycaster();
+let fadedMeshes = new Set();
+function updateOcclusionFade() {
+  const p = player();
+  const from = camera.position;
+  const to = new THREE.Vector3(p.position.x, 22, p.position.z);
+  const toCam = to.clone().sub(from);
+  const dist = toCam.length();
+  if (dist < 1) return;
+  occlusionRaycaster.set(from, toCam.normalize());
+  occlusionRaycaster.near = 4;
+  occlusionRaycaster.far = Math.max(4, dist - 6);
+
+  const meshesToCheck = [];
+  for (const o of objects) {
+    if (o.falling) continue;
+    if (Math.hypot(o.x - p.position.x, o.z - p.position.z) > 500) continue;
+    o.model.traverse(m => { if (m.isMesh) meshesToCheck.push(m); });
+  }
+  const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
+  const hitSet = new Set(hits.map(h => h.object));
+
+  for (const m of hitSet) {
+    if (!fadedMeshes.has(m)) {
+      m.userData._origOpacity = m.material.opacity;
+      m.userData._origTransparent = m.material.transparent;
+      m.material.transparent = true;
+    }
+    m.material.opacity = 0.32;
+  }
+  for (const m of fadedMeshes) {
+    if (!hitSet.has(m)) {
+      m.material.opacity = m.userData._origOpacity !== undefined ? m.userData._origOpacity : 1;
+      m.material.transparent = m.userData._origTransparent || false;
+    }
+  }
+  fadedMeshes = hitSet;
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -747,6 +785,7 @@ function loop(now) {
       if (timeLeft <= 0) endGame();
     }
   }
+  updateOcclusionFade();
   updateGroundHoles();
   updateCamera();
   renderer.render(scene, camera);
