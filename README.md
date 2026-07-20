@@ -68,6 +68,10 @@
     <div class="hud-box" id="timer-box"><div class="hud-label">Time</div><div class="hud-value" id="timeVal">90</div></div>
   </div>
   <div class="leaderboard" id="lb"></div>
+  <div class="hud-box" id="debugBox" style="position:absolute; bottom:24px; left:24px; font-size:11px; padding:8px 14px;">
+    <div class="hud-label">Debug: faded</div>
+    <div class="hud-value" id="debugVal" style="font-size:16px;">0</div>
+  </div>
 </div>
 <div id="joystick"><div class="base"></div><div class="knob"></div></div>
 
@@ -104,33 +108,41 @@ scene.fog = new THREE.Fog(0xbfe3f2, 700, 2200);
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 4000);
 let fadedMeshes = new Set();
+const occlusionRaycaster = new THREE.Raycaster();
 function updateOcclusionFade() {
   const p = player();
-  const holeWorldPos = new THREE.Vector3(p.position.x, p.r * 0.3, p.position.z);
-  const holeDistToCam = camera.position.distanceTo(holeWorldPos);
-  const holeScreen = holeWorldPos.clone().project(camera);
-  const holeScreenR = (p.r / holeDistToCam) * 1.15;
+  const from = camera.position;
 
-  const hitSet = new Set();
+  const meshesToCheck = [];
   for (const o of objects) {
     if (o.falling) continue;
-    const worldDist = Math.hypot(o.x - p.position.x, o.z - p.position.z);
-    if (worldDist > 550) continue;
+    if (Math.hypot(o.x - p.position.x, o.z - p.position.z) > 550) continue;
+    o.model.traverse(m => { if (m.isMesh) meshesToCheck.push(m); });
+  }
 
-    const objWorldPos = new THREE.Vector3(o.x, o.type.height * 0.5, o.z);
-    const objDistToCam = camera.position.distanceTo(objWorldPos);
-    if (objDistToCam > holeDistToCam - 4) continue; // 穴より手前にある物だけを対象にする
-
-    const objScreen = objWorldPos.clone().project(camera);
-    if (objScreen.z > 1 || objScreen.z < -1) continue; // 画面の外(カメラの裏側等)
-
-    const dxS = objScreen.x - holeScreen.x, dyS = objScreen.y - holeScreen.y;
-    const screenDist = Math.hypot(dxS, dyS);
-    const objScreenR = (Math.max(o.type.hw, o.type.hd) / objDistToCam) * 1.3;
-
-    if (screenDist < holeScreenR + objScreenR) {
-      o.model.traverse(m => { if (m.isMesh) hitSet.add(m); });
+  // 穴の見た目の円全体を、複数の同心円×複数角度でびっしりサンプリングする。
+  // (前回は本数が少なすぎて小さい建物を取りこぼしていたので、密度を大幅に増やした)
+  const targets = [new THREE.Vector3(p.position.x, p.r * 0.3, p.position.z)];
+  const RINGS = [0.35, 0.7, 1.0];
+  const SAMPLES_PER_RING = 10;
+  for (const ringT of RINGS) {
+    const rr = p.r * ringT;
+    for (let i = 0; i < SAMPLES_PER_RING; i++) {
+      const a = (i / SAMPLES_PER_RING) * Math.PI * 2;
+      targets.push(new THREE.Vector3(p.position.x + Math.cos(a) * rr, p.r * 0.3, p.position.z + Math.sin(a) * rr));
     }
+  }
+
+  const hitSet = new Set();
+  for (const to of targets) {
+    const toCam = to.clone().sub(from);
+    const dist = toCam.length();
+    if (dist < 1) continue;
+    occlusionRaycaster.set(from, toCam.normalize());
+    occlusionRaycaster.near = 4;
+    occlusionRaycaster.far = Math.max(4, dist - 4);
+    const hits = occlusionRaycaster.intersectObjects(meshesToCheck, false);
+    for (const h of hits) hitSet.add(h.object);
   }
 
   for (const m of hitSet) {
@@ -148,6 +160,8 @@ function updateOcclusionFade() {
     }
   }
   fadedMeshes = hitSet;
+  const debugEl = document.getElementById('debugVal');
+  if (debugEl) debugEl.textContent = String(hitSet.size);
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
